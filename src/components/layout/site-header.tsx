@@ -76,15 +76,15 @@ export function SiteHeader() {
               </Button>
             </div>
           ) : (
-            <Link href="/signin">
-              <Button variant="ghost" className="hidden sm:inline-flex">
+            <Link href="/signin" className="hidden sm:inline-flex">
+              <Button variant="ghost">
                 Sign in
               </Button>
             </Link>
           )}
           <Link 
             href="/cart" 
-            className="shopnest-focus relative inline-flex h-11 items-center justify-center rounded-full border border-border bg-surface px-5 text-sm font-semibold text-foreground shadow-sm transition hover:-translate-y-0.5 hover:border-brand/40 hover:bg-ink-soft hover:text-brand"
+            className="shopnest-focus relative inline-flex h-11 items-center justify-center rounded-full border border-brand/45 bg-surface px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:border-brand hover:bg-ink-soft hover:text-brand hover:shadow-[0_8px_24px_rgba(243,154,61,0.12)]"
             aria-label="Cart"
           >
             Cart
