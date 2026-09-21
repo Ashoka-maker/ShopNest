@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 type EmailRequest = {
   orderId: string;
   customerEmail: string;
@@ -34,8 +37,8 @@ const maskSender = (sender: string) => {
 };
 
 export async function POST(request: Request) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.RESEND_FROM_EMAIL;
+  const apiKey = process.env["RESEND_API_KEY"]?.trim();
+  const fromEmail = process.env["RESEND_FROM_EMAIL"]?.trim();
   const developmentRecipient =
     process.env.NODE_ENV !== "production" ? process.env.RESEND_TEST_RECIPIENT : undefined;
 
