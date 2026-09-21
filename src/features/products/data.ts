@@ -3,46 +3,68 @@ import { deleteSellerProduct, getSellerProducts, saveSellerProduct } from "@/lib
 
 const PRODUCT_CATALOG_KEY = "shopnest_product_catalog";
 export const PRODUCT_CATALOG_UPDATED_EVENT = "shopnest:product-catalog-updated";
+type ProductCatalogState = {
+  products: Product[];
+  deletedProductIds: string[];
+};
 
-function readCatalogRecords(): Product[] {
-  if (typeof window === "undefined") return STATIC_PRODUCTS;
+function seedCatalogProducts(): Product[] {
+  const sellerProducts = getSellerProducts("").map((product) => ({
+    ...product,
+    rating: 0,
+    reviewCount: 0,
+    publishStatus: product.publishStatus ?? (product.approvalStatus === "approved" ? "published" : "unpublished"),
+  }));
+  return [...STATIC_PRODUCTS.map((product) => ({
+    ...product,
+    approvalStatus: product.approvalStatus ?? "approved",
+    publishStatus: product.publishStatus ?? "published",
+  })), ...sellerProducts];
+}
+
+function readCatalogState(): ProductCatalogState {
+  if (typeof window === "undefined") return { products: STATIC_PRODUCTS, deletedProductIds: [] };
   try {
     const stored = localStorage.getItem(PRODUCT_CATALOG_KEY);
-    if (stored) return JSON.parse(stored);
-    const sellerProducts = getSellerProducts("").map((product) => ({
-      ...product,
-      rating: 0,
-      reviewCount: 0,
-      publishStatus: product.publishStatus ?? (product.approvalStatus === "approved" ? "published" : "unpublished"),
-    }));
-    const records = [...STATIC_PRODUCTS.map((product) => ({
-      ...product,
-      approvalStatus: product.approvalStatus ?? "approved",
-      publishStatus: product.publishStatus ?? "published",
-    })), ...sellerProducts];
-    localStorage.setItem(PRODUCT_CATALOG_KEY, JSON.stringify(records));
-    return records;
+    const parsed = stored ? JSON.parse(stored) : null;
+    const state: ProductCatalogState = Array.isArray(parsed)
+      ? { products: parsed, deletedProductIds: [] }
+      : {
+          products: Array.isArray(parsed?.products) ? parsed.products : [],
+          deletedProductIds: Array.isArray(parsed?.deletedProductIds) ? parsed.deletedProductIds : [],
+        };
+    const deleted = new Set(state.deletedProductIds);
+    const existing = new Map(state.products.map((product) => [product.id, product]));
+    for (const product of seedCatalogProducts()) {
+      if (!deleted.has(product.id) && !existing.has(product.id)) existing.set(product.id, product);
+    }
+    const migrated = { products: [...existing.values()], deletedProductIds: [...deleted] };
+    if (!stored || Array.isArray(parsed) || migrated.products.length !== state.products.length) {
+      writeCatalogState(migrated);
+    }
+    return migrated;
   } catch {
-    return STATIC_PRODUCTS;
+    return { products: seedCatalogProducts(), deletedProductIds: [] };
   }
 }
 
-function writeCatalogRecords(records: Product[]) {
+function writeCatalogState(state: ProductCatalogState) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(PRODUCT_CATALOG_KEY, JSON.stringify(records));
+  localStorage.setItem(PRODUCT_CATALOG_KEY, JSON.stringify(state));
   window.dispatchEvent(new CustomEvent(PRODUCT_CATALOG_UPDATED_EVENT));
 }
 
 export function getCatalogProductsForAdmin(): Product[] {
-  return readCatalogRecords();
+  return readCatalogState().products;
 }
 
 export function saveCatalogProduct(product: Product): boolean {
-  const records = readCatalogRecords();
-  const index = records.findIndex((item) => item.id === product.id);
-  if (index >= 0) records[index] = product;
-  else records.push(product);
-  writeCatalogRecords(records);
+  const state = readCatalogState();
+  const index = state.products.findIndex((item) => item.id === product.id);
+  if (index >= 0) state.products[index] = product;
+  else state.products.push(product);
+  state.deletedProductIds = state.deletedProductIds.filter((id) => id !== product.id);
+  writeCatalogState(state);
   if (product.id.startsWith("p-") && getSellerProducts("").some((item) => item.id === product.id)) {
     saveSellerProduct({ ...product, updatedAt: new Date().toISOString(), createdAt: product.createdAt ?? new Date().toISOString(), approvalStatus: product.approvalStatus === "rejected" ? "rejected" : product.approvalStatus === "draft" ? "pending" : "approved" }, product.sellerId);
   }
@@ -50,9 +72,11 @@ export function saveCatalogProduct(product: Product): boolean {
 }
 
 export function deleteCatalogProduct(productId: string): boolean {
-  const records = readCatalogRecords();
-  if (!records.some((item) => item.id === productId)) return false;
-  writeCatalogRecords(records.filter((item) => item.id !== productId));
+  const state = readCatalogState();
+  if (!state.products.some((item) => item.id === productId)) return false;
+  state.products = state.products.filter((item) => item.id !== productId);
+  state.deletedProductIds = [...new Set([...state.deletedProductIds, productId])];
+  writeCatalogState(state);
   deleteSellerProduct(productId);
   return true;
 }
@@ -620,7 +644,7 @@ export function getRelatedProducts(product: Product, limit = 4) {
 }
 
 export function getAllProducts(): Product[] {
-  return readCatalogRecords().filter(
+  return readCatalogState().products.filter(
     (product) => product.approvalStatus === "approved" && product.publishStatus === "published",
   );
 }
