@@ -11,6 +11,8 @@
   --accent: #ffc15d;
   --ink-soft: #24201a;
   --shadow-soft: 0 18px 42px rgba(0, 0, 0, 0.3);
+  --foreground-on-light: #17231e;
+  --muted-on-light: #53635b;
 }
 
 @theme inline {
@@ -79,6 +81,20 @@ textarea {
 .shopnest-focus:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--brand) 28%, transparent);
   outline-offset: 2px;
+}
+
+/* Legacy light surfaces remain intentionally light, so give their inherited
+   text a dedicated dark reading color instead of the dark-theme foreground. */
+[class*="bg-white"] {
+  color: var(--foreground-on-light);
+}
+
+[class*="bg-white"] .text-muted {
+  color: var(--muted-on-light);
+}
+
+[class*="bg-white"] .text-foreground {
+  color: var(--foreground-on-light);
 }
 
 @keyframes shopnest-rise {

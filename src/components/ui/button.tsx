@@ -14,8 +14,8 @@ export function buttonClassName(variant: ButtonVariant = "primary") {
     variant === "primary" &&
       "bg-brand text-black hover:bg-brand-dark active:bg-brand-dark hover:shadow-md",
     variant === "secondary" &&
-      "border border-border bg-surface text-foreground hover:border-brand/40 hover:bg-white",
-    variant === "ghost" && "text-foreground hover:bg-white/70",
+      "border border-border bg-surface text-foreground hover:border-brand/40 hover:bg-white hover:text-[#17231e]",
+    variant === "ghost" && "text-foreground hover:bg-white/10 hover:text-brand",
   );
 }
 

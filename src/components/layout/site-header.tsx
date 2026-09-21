@@ -124,7 +124,7 @@ export function SiteHeader() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white"
+                  className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/10 hover:text-brand"
                   onClick={() => setMenuOpen(false)}
                 >
                   {link.label}
@@ -139,7 +139,7 @@ export function SiteHeader() {
                   {isAdmin && (
                     <Link
                       href="/admin/dashboard"
-                      className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white"
+                      className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/10 hover:text-brand"
                       onClick={() => setMenuOpen(false)}
                     >
                       Admin Dashboard
@@ -148,7 +148,7 @@ export function SiteHeader() {
                   {isSeller && (
                     <Link
                       href="/seller/dashboard"
-                      className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white"
+                      className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/10 hover:text-brand"
                       onClick={() => setMenuOpen(false)}
                     >
                       Seller Dashboard
@@ -156,9 +156,9 @@ export function SiteHeader() {
                   )}
                   {!isSeller && !isAdmin && (
                     <>
-                      <Link href="/orders" className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white" onClick={() => setMenuOpen(false)}>My Orders</Link>
-                      <Link href="/wishlist" className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white" onClick={() => setMenuOpen(false)}>My Wishlist</Link>
-                      <Link href="/account" className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white" onClick={() => setMenuOpen(false)}>Account Settings</Link>
+                      <Link href="/orders" className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/10 hover:text-brand" onClick={() => setMenuOpen(false)}>My Orders</Link>
+                      <Link href="/wishlist" className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/10 hover:text-brand" onClick={() => setMenuOpen(false)}>My Wishlist</Link>
+                      <Link href="/account" className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/10 hover:text-brand" onClick={() => setMenuOpen(false)}>Account Settings</Link>
                     </>
                   )}
                   <button
@@ -166,7 +166,7 @@ export function SiteHeader() {
                       signOut();
                       setMenuOpen(false);
                     }}
-                    className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white text-left"
+                    className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/10 hover:text-brand text-left"
                   >
                     Sign out
                   </button>
@@ -174,7 +174,7 @@ export function SiteHeader() {
               ) : (
                 <Link
                   href="/signin"
-                  className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white"
+                  className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/10 hover:text-brand"
                   onClick={() => setMenuOpen(false)}
                 >
                   Sign in
@@ -182,7 +182,7 @@ export function SiteHeader() {
               )}
               <Link
                 href="/cart"
-                className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white flex items-center justify-between"
+                className="rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/10 hover:text-brand flex items-center justify-between"
                 onClick={() => setMenuOpen(false)}
               >
                 Cart

@@ -47,7 +47,7 @@ export function Hero() {
                 <Link
                   key={card.label}
                   href={card.href}
-                  className={`rounded-2xl ${card.tone} px-4 py-8 text-sm font-semibold shadow-sm transition hover:-translate-y-1 hover:shadow-md`}
+                  className={`rounded-2xl ${card.tone} px-4 py-8 text-sm font-semibold text-[#17231e] shadow-sm transition hover:-translate-y-1 hover:shadow-md hover:text-[#17231e]`}
                 >
                   {card.label}
                 </Link>
