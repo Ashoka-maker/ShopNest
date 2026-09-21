@@ -11,6 +11,7 @@ import { getAvailableInventoryById } from "@/lib/inventory-storage";
 import { getReviewSummary, REVIEWS_UPDATED_EVENT } from "@/lib/review-storage";
 import { WishlistButton } from "@/components/products/wishlist-button";
 import { SellerBadge } from "@/components/seller/seller-badge";
+import { AddToCartButton } from "@/components/products/add-to-cart-button";
 
 type ProductCardProps = {
   product: Product;
@@ -77,6 +78,7 @@ export function ProductCard({ product }: ProductCardProps) {
             </span>
           ) : null}
         </div>
+        <AddToCartButton productId={product.id} disabled={availableInventory <= 0} className="mt-2" />
       </div>
     </article>
   );

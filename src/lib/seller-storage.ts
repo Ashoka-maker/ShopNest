@@ -97,6 +97,10 @@ export function getSellerById(sellerId: string): Seller | null {
   return getStoredSellers().find((seller) => seller.id === sellerId) ?? null;
 }
 
+export function getAllSellers(): Seller[] {
+  return getStoredSellers().filter((seller) => seller.isActive && seller.approvalStatus === "approved");
+}
+
 export function generateSellerId(): string {
   return "seller-" + Date.now() + "-" + Math.random().toString(36).substr(2, 9);
 }

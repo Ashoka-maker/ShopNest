@@ -9,12 +9,14 @@ type AddToCartButtonProps = {
   productId: string;
   disabled?: boolean;
   size?: ProductSize;
+  className?: string;
 };
 
 export function AddToCartButton({
   productId,
   disabled = false,
   size,
+  className,
 }: AddToCartButtonProps) {
   const { addToCart } = useCart();
   const [isAdding, setIsAdding] = useState(false);
@@ -38,7 +40,7 @@ export function AddToCartButton({
     <Button
       onClick={handleAddToCart}
       disabled={disabled || isAdding}
-      className="w-full sm:w-auto"
+      className={`w-full sm:w-auto ${className ?? ""}`}
     >
       {isAdding ? "Adding..." : showSuccess ? "Added to cart!" : "Add to cart"}
     </Button>
