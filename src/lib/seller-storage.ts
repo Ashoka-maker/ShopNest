@@ -14,7 +14,11 @@ export const normalizeSellerProduct = (product: SellerProduct): SellerProduct =>
         ? "rejected"
         : "pending";
 
-  return { ...product, approvalStatus };
+  return {
+    ...product,
+    approvalStatus,
+    publishStatus: product.publishStatus ?? (approvalStatus === "approved" ? "published" : "unpublished"),
+  };
 };
 
 // Helper functions for localStorage
@@ -184,6 +188,7 @@ export function createSellerProductFromData(
     createdAt: now,
     updatedAt: now,
     approvalStatus: "pending",
+    publishStatus: "unpublished",
     sizes: data.sizes,
   };
 }

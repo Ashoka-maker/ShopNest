@@ -1,6 +1,6 @@
 import type { AdminStats, AdminAction } from "@/types/admin";
 import type { Seller } from "@/types/seller";
-import type { SellerProduct } from "@/types/product";
+import type { Product, SellerProduct, ProductCategorySlug, ProductSize } from "@/types/product";
 import type { Order } from "@/types/order";
 import type { User } from "@/types/user";
 import {
@@ -10,6 +10,10 @@ import {
 
 const ADMIN_ACTIONS_KEY = "shopnest_admin_actions";
 const ADMIN_CREDENTIALS_KEY = "shopnest_admin_credentials";
+const ADMIN_PRODUCTS_KEY = "shopnest_admin_products";
+const ADMIN_PRODUCT_OVERRIDES_KEY = "shopnest_product_overrides";
+const ADMIN_DELETED_PRODUCTS_KEY = "shopnest_deleted_products";
+export const ADMIN_PRODUCTS_UPDATED_EVENT = "shopnest:admin-products-updated";
 
 // Admin credentials (demo purposes)
 const ADMIN_EMAIL = "admin@shopnest.com";
@@ -211,6 +215,97 @@ export function getAllSellerProducts(): SellerProduct[] {
   }
 }
 
+  function getAdminProducts(): SellerProduct[] {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(localStorage.getItem(ADMIN_PRODUCTS_KEY) || "[]"); } catch { return []; }
+  }
+
+  function saveAdminProducts(products: SellerProduct[]) {
+    localStorage.setItem(ADMIN_PRODUCTS_KEY, JSON.stringify(products));
+    window.dispatchEvent(new CustomEvent(ADMIN_PRODUCTS_UPDATED_EVENT));
+  }
+
+  export function getAdminProductOverrides(): Record<string, Product> {
+    if (typeof window === "undefined") return {};
+    try { return JSON.parse(localStorage.getItem(ADMIN_PRODUCT_OVERRIDES_KEY) || "{}"); } catch { return {}; }
+  }
+
+  export function getDeletedProductIds(): string[] {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(localStorage.getItem(ADMIN_DELETED_PRODUCTS_KEY) || "[]"); } catch { return []; }
+  }
+
+  export function getAllAdminCatalogProducts(): Product[] {
+    return [...getAllSellerProducts(), ...getAdminProducts()].map((product) => ({
+      ...product,
+      rating: Number("rating" in product ? (product as { rating?: number }).rating ?? 0 : 0),
+      reviewCount: Number("reviewCount" in product ? (product as { reviewCount?: number }).reviewCount ?? 0 : 0),
+      approvalStatus: product.approvalStatus,
+      publishStatus: product.publishStatus ?? (product.approvalStatus === "approved" ? "published" : "unpublished"),
+    }));
+  }
+
+  export function saveAdminProduct(product: SellerProduct): boolean {
+    const products = getAdminProducts();
+    const index = products.findIndex((item) => item.id === product.id);
+    if (index >= 0) products[index] = product;
+    else products.push(product);
+    saveAdminProducts(products);
+    return true;
+  }
+
+  export function updateAdminCatalogProduct(product: Product): boolean {
+    const sellerProducts = getAllSellerProducts();
+    const sellerIndex = sellerProducts.findIndex((item) => item.id === product.id);
+    if (sellerIndex >= 0) {
+      sellerProducts[sellerIndex] = { ...sellerProducts[sellerIndex], ...product, updatedAt: new Date().toISOString() };
+      localStorage.setItem("shopnest_seller_products", JSON.stringify(sellerProducts));
+      window.dispatchEvent(new CustomEvent(SELLER_PRODUCTS_UPDATED_EVENT));
+      return true;
+    }
+    const adminProducts = getAdminProducts();
+    if (adminProducts.some((item) => item.id === product.id)) return saveAdminProduct(product as unknown as SellerProduct);
+    const overrides = getAdminProductOverrides();
+    overrides[product.id] = product;
+    localStorage.setItem(ADMIN_PRODUCT_OVERRIDES_KEY, JSON.stringify(overrides));
+    window.dispatchEvent(new CustomEvent(ADMIN_PRODUCTS_UPDATED_EVENT));
+    return true;
+  }
+
+  export function setProductPublished(productId: string, published: boolean): boolean {
+    const product = getAllAdminCatalogProducts().find((item) => item.id === productId);
+    if (!product) return false;
+    return updateAdminCatalogProduct({ ...product, publishStatus: published ? "published" : "unpublished" });
+  }
+
+  export function deleteAnyProduct(productId: string): boolean {
+    const sellerProducts = getAllSellerProducts().filter((item) => item.id !== productId);
+    const adminProducts = getAdminProducts().filter((item) => item.id !== productId);
+    const existed = sellerProducts.length !== getAllSellerProducts().length || adminProducts.length !== getAdminProducts().length;
+    if (existed) {
+      localStorage.setItem("shopnest_seller_products", JSON.stringify(sellerProducts));
+      saveAdminProducts(adminProducts);
+      window.dispatchEvent(new CustomEvent(SELLER_PRODUCTS_UPDATED_EVENT));
+      return true;
+    }
+    const deleted = new Set(getDeletedProductIds());
+    if (deleted.has(productId)) return false;
+    deleted.add(productId);
+    localStorage.setItem(ADMIN_DELETED_PRODUCTS_KEY, JSON.stringify([...deleted]));
+    window.dispatchEvent(new CustomEvent(ADMIN_PRODUCTS_UPDATED_EVENT));
+    return true;
+  }
+
+  export function createAdminProduct(input: SellerProduct): SellerProduct {
+    const id = `admin-product-${Date.now()}`;
+    const product: SellerProduct = {
+      ...input, id: input.id || id, slug: input.slug || `${input.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`,
+      highlights: input.highlights || [], gallery: input.gallery || [], createdAt: input.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString(),
+      approvalStatus: input.approvalStatus || "approved", publishStatus: input.publishStatus || "published",
+    };
+    saveAdminProduct(product);
+    return product;
+  }
 export function approveProduct(productId: string): boolean {
   const products = getAllSellerProducts();
   const index = products.findIndex((p) => p.id === productId);

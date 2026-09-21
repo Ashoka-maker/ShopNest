@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Container } from "@/components/layout/container";
 import { Carousel } from "@/components/ui/carousel";
@@ -8,7 +11,17 @@ import { getAllSellers, getSellerProducts } from "@/lib/seller-storage";
 import type { Product } from "@/types/product";
 
 export function MarketplaceDiscovery() {
-  const products = getAllProducts();
+  const [products, setProducts] = useState<Product[]>([]);
+  useEffect(() => {
+    const load = () => setProducts(getAllProducts());
+    load();
+    window.addEventListener("storage", load);
+    window.addEventListener("shopnest:product-catalog-updated", load);
+    return () => {
+      window.removeEventListener("storage", load);
+      window.removeEventListener("shopnest:product-catalog-updated", load);
+    };
+  }, []);
   const discounted = products.filter((item) => item.compareAtPriceCents && item.compareAtPriceCents > item.priceCents).slice(0, 8);
   const popular = [...products].sort((a, b) => b.rating - a.rating || b.reviewCount - a.reviewCount).slice(0, 8);
   const sellers = getAllSellers();

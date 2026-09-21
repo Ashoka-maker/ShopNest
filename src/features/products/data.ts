@@ -1,5 +1,61 @@
 import type { Product } from "@/types/product";
-import { getSellerProducts } from "@/lib/seller-storage";
+import { deleteSellerProduct, getSellerProducts, saveSellerProduct } from "@/lib/seller-storage";
+
+const PRODUCT_CATALOG_KEY = "shopnest_product_catalog";
+export const PRODUCT_CATALOG_UPDATED_EVENT = "shopnest:product-catalog-updated";
+
+function readCatalogRecords(): Product[] {
+  if (typeof window === "undefined") return STATIC_PRODUCTS;
+  try {
+    const stored = localStorage.getItem(PRODUCT_CATALOG_KEY);
+    if (stored) return JSON.parse(stored);
+    const sellerProducts = getSellerProducts("").map((product) => ({
+      ...product,
+      rating: 0,
+      reviewCount: 0,
+      publishStatus: product.publishStatus ?? (product.approvalStatus === "approved" ? "published" : "unpublished"),
+    }));
+    const records = [...STATIC_PRODUCTS.map((product) => ({
+      ...product,
+      approvalStatus: product.approvalStatus ?? "approved",
+      publishStatus: product.publishStatus ?? "published",
+    })), ...sellerProducts];
+    localStorage.setItem(PRODUCT_CATALOG_KEY, JSON.stringify(records));
+    return records;
+  } catch {
+    return STATIC_PRODUCTS;
+  }
+}
+
+function writeCatalogRecords(records: Product[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(PRODUCT_CATALOG_KEY, JSON.stringify(records));
+  window.dispatchEvent(new CustomEvent(PRODUCT_CATALOG_UPDATED_EVENT));
+}
+
+export function getCatalogProductsForAdmin(): Product[] {
+  return readCatalogRecords();
+}
+
+export function saveCatalogProduct(product: Product): boolean {
+  const records = readCatalogRecords();
+  const index = records.findIndex((item) => item.id === product.id);
+  if (index >= 0) records[index] = product;
+  else records.push(product);
+  writeCatalogRecords(records);
+  if (product.id.startsWith("p-") && getSellerProducts("").some((item) => item.id === product.id)) {
+    saveSellerProduct({ ...product, updatedAt: new Date().toISOString(), createdAt: product.createdAt ?? new Date().toISOString(), approvalStatus: product.approvalStatus === "rejected" ? "rejected" : product.approvalStatus === "draft" ? "pending" : "approved" }, product.sellerId);
+  }
+  return true;
+}
+
+export function deleteCatalogProduct(productId: string): boolean {
+  const records = readCatalogRecords();
+  if (!records.some((item) => item.id === productId)) return false;
+  writeCatalogRecords(records.filter((item) => item.id !== productId));
+  deleteSellerProduct(productId);
+  return true;
+}
 
 function img(seed: string) {
   return `https://picsum.photos/seed/${seed}/1200/900`;
@@ -541,7 +597,7 @@ export function getProductBySlug(slug: string) {
 }
 
 export function getRelatedProducts(product: Product, limit = 4) {
-  const related = STATIC_PRODUCTS.filter(
+  const related = getAllProducts().filter(
     (item) => item.category === product.category && item.id !== product.id,
   );
 
@@ -564,16 +620,9 @@ export function getRelatedProducts(product: Product, limit = 4) {
 }
 
 export function getAllProducts(): Product[] {
-  const staticProductsWithRating = STATIC_PRODUCTS;
-  const sellerProducts = getSellerProducts("")
-    .filter((sp) => sp.approvalStatus?.trim().toLowerCase() === "approved")
-    .map((sp) => ({
-      ...sp,
-      rating: 0,
-      reviewCount: 0,
-    }));
-
-  return [...staticProductsWithRating, ...sellerProducts];
+  return readCatalogRecords().filter(
+    (product) => product.approvalStatus === "approved" && product.publishStatus === "published",
+  );
 }
 
 // Export PRODUCTS for backward compatibility

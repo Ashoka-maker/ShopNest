@@ -28,6 +28,10 @@ export type Product = {
   reviewCount: number;
   sizes?: ProductSize[];
   inventoryBySize?: SizeInventory;
+  createdAt?: string;
+  updatedAt?: string;
+  approvalStatus?: "draft" | "pending" | "approved" | "rejected";
+  publishStatus?: "published" | "unpublished";
 };
 
 export type SellerProduct = {
@@ -46,7 +50,8 @@ export type SellerProduct = {
   inventory: number;
   createdAt: string;
   updatedAt: string;
-  approvalStatus: "pending" | "approved" | "rejected";
+  approvalStatus: "draft" | "pending" | "approved" | "rejected";
+  publishStatus?: "published" | "unpublished";
   sizes?: ProductSize[];
   inventoryBySize?: SizeInventory;
 };

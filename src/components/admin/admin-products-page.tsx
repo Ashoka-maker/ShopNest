@@ -1,278 +1,89 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { useAuth } from "@/lib/auth-context";
-import { getAllSellerProducts, approveProduct, rejectProduct, deleteProduct } from "@/lib/admin-storage";
 import { CATEGORIES } from "@/lib/constants";
+import { deleteCatalogProduct, getCatalogProductsForAdmin, PRODUCT_CATALOG_UPDATED_EVENT, saveCatalogProduct } from "@/features/products/data";
 import { formatCents } from "@/lib/money";
-import type { SellerProduct } from "@/types/product";
-import { getAvailableInventory } from "@/lib/inventory-storage";
+import { getAvailableInventoryById } from "@/lib/inventory-storage";
+import type { Product, ProductCategorySlug, ProductSize } from "@/types/product";
+
+type FormState = {
+  name: string; description: string; price: string; compareAt: string; category: ProductCategorySlug;
+  inventory: string; imageUrl: string; sellerName: string; sellerId: string; sizes: ProductSize[];
+};
+const emptyForm: FormState = { name: "", description: "", price: "", compareAt: "", category: "home-living", inventory: "0", imageUrl: "", sellerName: "ShopNest", sellerId: "shopnest-admin", sizes: [] };
 
 export function AdminProductsPage() {
   const router = useRouter();
   const { user, isAdmin } = useAuth();
-  const [products, setProducts] = useState<SellerProduct[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [form, setForm] = useState<FormState>(emptyForm);
+  const [editing, setEditing] = useState<Product | null>(null);
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("all");
+  const [seller, setSeller] = useState("all");
+  const [status, setStatus] = useState("all");
+  const [sort, setSort] = useState("newest");
+  const [confirming, setConfirming] = useState<Product | null>(null);
 
+  const load = () => setProducts(getCatalogProductsForAdmin());
   useEffect(() => {
-    if (!user || !isAdmin) {
-      router.push("/admin/login");
-      return;
-    }
-
-    const loadProducts = () => {
-      const allProducts = getAllSellerProducts();
-      setProducts(allProducts);
-      setLoading(false);
-    };
-
-    loadProducts();
+    if (!user || !isAdmin) { router.push("/admin/login"); return; }
+    load();
+    window.addEventListener(PRODUCT_CATALOG_UPDATED_EVENT, load);
+    window.addEventListener("storage", load);
+    return () => { window.removeEventListener(PRODUCT_CATALOG_UPDATED_EVENT, load); window.removeEventListener("storage", load); };
   }, [user, isAdmin, router]);
 
-  const handleApproveProduct = async (productId: string) => {
-    const success = approveProduct(productId);
-    if (success) {
-      const updatedProducts = getAllSellerProducts();
-      setProducts(updatedProducts);
-    }
+  const visible = useMemo(() => products.filter((product) => {
+    const matchesQuery = `${product.name} ${product.sellerName} ${product.slug}`.toLowerCase().includes(query.toLowerCase());
+    const matchesCategory = category === "all" || product.category === category;
+    const currentStatus = product.approvalStatus === "approved" ? (product.publishStatus === "published" ? "published" : "unpublished") : product.approvalStatus || "draft";
+    return matchesQuery && matchesCategory && (seller === "all" || product.sellerId === seller) && (status === "all" || currentStatus === status);
+  }).sort((a, b) => sort === "price-low" ? a.priceCents - b.priceCents : sort === "price-high" ? b.priceCents - a.priceCents : (b.createdAt || "").localeCompare(a.createdAt || "")), [products, query, category, seller, status, sort]);
+
+  const openEdit = (product: Product) => {
+    setEditing(product);
+    setForm({ name: product.name, description: product.description, price: String(product.priceCents / 100), compareAt: product.compareAtPriceCents ? String(product.compareAtPriceCents / 100) : "", category: product.category, inventory: String(product.inventory), imageUrl: product.imageUrl, sellerName: product.sellerName, sellerId: product.sellerId, sizes: product.sizes || [] });
   };
-
-  const handleRejectProduct = async (productId: string) => {
-    if (!confirm("Are you sure you want to reject this product?")) return;
-
-    const success = rejectProduct(productId);
-    if (success) {
-      const updatedProducts = getAllSellerProducts();
-      setProducts(updatedProducts);
-    }
+  const save = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!form.name.trim() || !form.description.trim() || !form.price || !form.imageUrl.trim() || !form.sellerName.trim()) return;
+    const base = editing || {
+      id: "", slug: "", highlights: [], gallery: [], rating: 0, reviewCount: 0, createdAt: new Date().toISOString(),
+      approvalStatus: "approved" as const, publishStatus: "published" as const,
+    };
+    const product: Product = {
+      ...base, name: form.name.trim(), slug: editing?.slug || `${form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`, createdAt: editing?.createdAt || new Date().toISOString(),
+      description: form.description.trim(), priceCents: Math.round(Number(form.price) * 100), compareAtPriceCents: form.compareAt ? Math.round(Number(form.compareAt) * 100) : null,
+      category: form.category, inventory: Math.max(0, Number(form.inventory) || 0), imageUrl: form.imageUrl.trim(), sellerName: form.sellerName.trim(), sellerId: form.sellerId.trim() || "shopnest-admin", sizes: form.sizes, updatedAt: new Date().toISOString(),
+      approvalStatus: editing?.approvalStatus || "approved", publishStatus: editing?.publishStatus || "published",
+    };
+    saveCatalogProduct({ ...product, rating: editing?.rating || 0, reviewCount: editing?.reviewCount || 0 });
+    setEditing(null); setForm(emptyForm); load();
   };
+  const confirmDelete = () => { if (confirming) { deleteCatalogProduct(confirming.id); setConfirming(null); load(); } };
 
-  const handleDeleteProduct = async (productId: string) => {
-    if (!confirm("Are you sure you want to delete this product? This action cannot be undone.")) return;
-
-    const success = deleteProduct(productId);
-    if (success) {
-      const updatedProducts = getAllSellerProducts();
-      setProducts(updatedProducts);
-    }
-  };
-
-  if (loading) {
-    return (
-      <Container className="py-8 sm:py-12">
-        <div className="mx-auto max-w-6xl">
-          <div className="animate-pulse">
-            <div className="h-8 bg-border rounded w-1/3 mb-4"></div>
-            <div className="h-4 bg-border rounded w-1/2"></div>
-          </div>
-        </div>
-      </Container>
-    );
-  }
-
-  const pendingProducts = products.filter(p => p.approvalStatus === "pending");
-  const approvedProducts = products.filter(p => p.approvalStatus === "approved");
-
-  return (
-    <Container className="py-8 sm:py-12">
-      <div className="mx-auto max-w-6xl">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-          <div>
-            <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-              Product Management
-            </h1>
-            <p className="mt-2 text-base text-muted">
-              Approve and manage seller products
-            </p>
-          </div>
-          <Link href="/admin/dashboard">
-            <Button variant="secondary">Back to Dashboard</Button>
-          </Link>
-        </div>
-
-        {/* Pending Products */}
-        {pendingProducts.length > 0 && (
-          <div className="rounded-2xl border border-border bg-surface overflow-hidden mb-8">
-            <div className="p-6 border-b border-border bg-accent/5">
-              <h2 className="font-display text-lg font-semibold tracking-tight">
-                Pending Approval ({pendingProducts.length})
-              </h2>
-            </div>
-
-            <div className="divide-y divide-border">
-              {pendingProducts.map((product) => {
-                const category = CATEGORIES.find((c) => c.slug === product.category);
-                return (
-                  <div key={product.id} className="p-6">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                      <div className="flex gap-4 flex-1">
-                        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-[#efe8dc]">
-                          <img
-                            src={product.imageUrl}
-                            alt={product.name}
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-lg">{product.name}</h3>
-                          <p className="text-sm text-muted mt-1">{product.description.substring(0, 100)}...</p>
-                          <div className="flex items-center gap-4 mt-2 text-sm">
-                            <span className="text-muted">Seller: {product.sellerName}</span>
-                            <span className="text-muted">Price: {formatCents(product.priceCents)}</span>
-                            <span className="text-muted">
-                              Stock: {getAvailableInventory(product)}
-                              {getAvailableInventory(product) === 0 ? " (Out of Stock)" : ""}
-                            </span>
-                          </div>
-                          <span className="inline-flex items-center rounded-full bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand mt-2">
-                            {category?.name || product.category}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={() => handleApproveProduct(product.id)}
-                          className="bg-green-600 hover:bg-green-700"
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          onClick={() => handleRejectProduct(product.id)}
-                          variant="ghost"
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          Reject
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* All Products */}
-        <div className="rounded-2xl border border-border bg-surface overflow-hidden">
-          <div className="p-6 border-b border-border">
-            <h2 className="font-display text-lg font-semibold tracking-tight">
-              All Products ({products.length})
-            </h2>
-          </div>
-
-          {products.length === 0 ? (
-            <div className="p-12 text-center">
-              <p className="text-base text-muted">
-                No products found.
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-background/50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                      Product
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                      Seller
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                      Category
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                      Price
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-muted uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {products.map((product) => {
-                    const category = CATEGORIES.find((c) => c.slug === product.category);
-                    return (
-                      <tr key={product.id} className="hover:bg-background/30">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-[#efe8dc]">
-                              <img
-                                src={product.imageUrl}
-                                alt={product.name}
-                                className="h-full w-full object-cover"
-                              />
-                            </div>
-                            <div>
-                              <p className="font-medium text-sm">{product.name}</p>
-                              <p className="text-xs text-muted">{product.slug}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-sm">
-                          {product.sellerName}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="inline-flex items-center rounded-full bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand">
-                            {category?.name || product.category}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm font-medium">
-                          {formatCents(product.priceCents)}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
-                            product.approvalStatus === "approved"
-                              ? "bg-green-100 text-green-800"
-                              : product.approvalStatus === "rejected"
-                              ? "bg-red-100 text-red-800"
-                              : "bg-yellow-100 text-yellow-800"
-                          }`}>
-                            {product.approvalStatus.charAt(0).toUpperCase() + product.approvalStatus.slice(1)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {product.approvalStatus === "pending" && (
-                              <>
-                                <button
-                                  onClick={() => handleApproveProduct(product.id)}
-                                  className="text-sm font-medium text-green-600 hover:text-green-700"
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={() => handleRejectProduct(product.id)}
-                                  className="text-sm font-medium text-red-600 hover:text-red-700"
-                                >
-                                  Reject
-                                </button>
-                              </>
-                            )}
-                            <button
-                              onClick={() => handleDeleteProduct(product.id)}
-                              className="text-sm font-medium text-red-600 hover:text-red-700"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-    </Container>
-  );
+  return <Container className="py-8 sm:py-12"><div className="mx-auto max-w-7xl">
+    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-brand">Admin catalog</p><h1 className="mt-2 font-display text-3xl font-semibold sm:text-4xl">Product Management</h1><p className="mt-2 text-muted">Manage every product, regardless of seller ownership.</p></div><Button onClick={() => { setEditing(null); setForm(emptyForm); }}>Add product</Button></div>
+    <form onSubmit={save} className="mt-8 grid gap-3 rounded-3xl border border-border bg-surface p-5 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
+      <input required placeholder="Product name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="rounded-xl border border-border bg-background px-3 py-3" />
+      <input required placeholder="Seller name" value={form.sellerName} onChange={(e) => setForm({ ...form, sellerName: e.target.value })} className="rounded-xl border border-border bg-background px-3 py-3" />
+      <input placeholder="Seller ID" value={form.sellerId} onChange={(e) => setForm({ ...form, sellerId: e.target.value })} className="rounded-xl border border-border bg-background px-3 py-3" />
+      <input required placeholder="Image URL" value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} className="rounded-xl border border-border bg-background px-3 py-3" />
+      <textarea required placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="min-h-24 rounded-xl border border-border bg-background px-3 py-3 sm:col-span-2" />
+      <input required type="number" min="0" step="0.01" placeholder="Price (₹)" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="rounded-xl border border-border bg-background px-3 py-3" />
+      <input type="number" min="0" step="0.01" placeholder="Original price (₹)" value={form.compareAt} onChange={(e) => setForm({ ...form, compareAt: e.target.value })} className="rounded-xl border border-border bg-background px-3 py-3" />
+      <input type="number" min="0" placeholder="Inventory" value={form.inventory} onChange={(e) => setForm({ ...form, inventory: e.target.value })} className="rounded-xl border border-border bg-background px-3 py-3" />
+      <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as ProductCategorySlug })} className="rounded-xl border border-border bg-background px-3 py-3">{CATEGORIES.map((item) => <option key={item.slug} value={item.slug}>{item.name}</option>)}</select>
+      <div className="flex gap-2 sm:col-span-2 lg:col-span-4"><Button type="submit">{editing ? "Save changes" : "Create product"}</Button>{editing ? <Button type="button" variant="secondary" onClick={() => { setEditing(null); setForm(emptyForm); }}>Cancel</Button> : null}</div>
+    </form>
+    <div className="mt-8 grid gap-3 rounded-3xl border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-5"><input placeholder="Search products or sellers" value={query} onChange={(e) => setQuery(e.target.value)} className="rounded-xl border border-border bg-background px-3 py-3 lg:col-span-2" /><select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-xl border border-border bg-background px-3 py-3"><option value="all">All categories</option>{CATEGORIES.map((item) => <option key={item.slug} value={item.slug}>{item.name}</option>)}</select><select value={seller} onChange={(e) => setSeller(e.target.value)} className="rounded-xl border border-border bg-background px-3 py-3"><option value="all">All sellers</option>{[...new Map(products.map((item) => [item.sellerId, item.sellerName])).entries()].map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select><select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-xl border border-border bg-background px-3 py-3"><option value="all">All statuses</option>{["draft","pending","approved","rejected","published","unpublished"].map((item) => <option key={item} value={item}>{item}</option>)}</select><select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-xl border border-border bg-background px-3 py-3"><option value="newest">Newest</option><option value="price-low">Price low</option><option value="price-high">Price high</option></select></div>
+    <div className="mt-5 overflow-hidden rounded-3xl border border-border bg-surface"><div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead className="border-b border-border bg-background/60 text-xs uppercase tracking-wide text-muted"><tr>{["Product","Seller","Category","Price","Inventory","Status","Created","Actions"].map((head) => <th key={head} className="px-5 py-4">{head}</th>)}</tr></thead><tbody className="divide-y divide-border">{visible.map((product) => { const current = product.approvalStatus === "approved" ? product.publishStatus === "published" ? "published" : "unpublished" : product.approvalStatus || "draft"; return <tr key={product.id} className="hover:bg-white/5"><td className="px-5 py-4"><div className="flex items-center gap-3"><Image src={product.imageUrl} alt="" width={52} height={52} className="h-13 w-13 rounded-xl object-cover" /><div><p className="font-semibold">{product.name}</p><p className="text-xs text-muted">{product.id}</p></div></div></td><td className="px-5 py-4">{product.sellerName}</td><td className="px-5 py-4">{CATEGORIES.find((item) => item.slug === product.category)?.name}</td><td className="px-5 py-4 font-semibold">{formatCents(product.priceCents)}</td><td className="px-5 py-4">{getAvailableInventoryById(product.id, product.inventory)}</td><td className="px-5 py-4"><span className="rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">{current}</span></td><td className="px-5 py-4 text-muted">{product.createdAt ? new Date(product.createdAt).toLocaleDateString("en-IN") : "—"}</td><td className="px-5 py-4"><div className="flex flex-wrap gap-2"><button onClick={() => openEdit(product)} className="font-semibold text-brand hover:text-accent">Edit</button><button onClick={() => { saveCatalogProduct({ ...product, publishStatus: current !== "published" ? "published" : "unpublished" }); load(); }} className="font-semibold text-brand hover:text-accent">{current === "published" ? "Unpublish" : "Publish"}</button>{product.approvalStatus === "pending" ? <button onClick={() => { saveCatalogProduct({ ...product, approvalStatus: "approved" }); load(); }} className="font-semibold text-green-400">Approve</button> : null}<button onClick={() => setConfirming(product)} className="font-semibold text-red-400 hover:text-red-300">Delete</button></div></td></tr>; })}</tbody></table></div>{!visible.length ? <p className="p-12 text-center text-muted">No products match the current filters.</p> : null}</div>
+  </div>{confirming ? <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4"><div className="w-full max-w-md rounded-3xl border border-border bg-surface p-6 shadow-2xl"><Image src={confirming.imageUrl} alt="" width={96} height={96} className="h-24 w-24 rounded-2xl object-cover" /><h2 className="mt-4 text-xl font-semibold">Delete {confirming.name}?</h2><p className="mt-2 text-sm text-muted">Seller: {confirming.sellerName}</p><p className="mt-4 rounded-xl bg-red-500/10 p-3 text-sm text-red-300">This permanently deletes the product and cannot be undone.</p><div className="mt-5 flex gap-3"><Button onClick={confirmDelete} className="bg-red-600 text-white hover:bg-red-500">Delete permanently</Button><Button variant="secondary" onClick={() => setConfirming(null)}>Cancel</Button></div></div></div> : null}</Container>;
 }
