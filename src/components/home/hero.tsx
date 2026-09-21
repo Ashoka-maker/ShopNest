@@ -4,7 +4,7 @@ import { Container } from "@/components/layout/container";
 
 export function Hero() {
   return (
-    <section className="overflow-hidden bg-[radial-gradient(circle_at_85%_10%,rgba(22,122,82,0.13),transparent_35%),linear-gradient(180deg,#f1f7f3_0%,#f6f8f7_100%)]">
+    <section className="overflow-hidden bg-[radial-gradient(circle_at_85%_10%,rgba(243,154,61,0.16),transparent_35%),linear-gradient(180deg,#171b19_0%,#0b0d0c_100%)]">
       <Container className="grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[1.1fr_0.9fr] lg:py-24">
         <div>
           <p className="inline-flex rounded-full bg-brand/10 px-3 py-1 text-xs font-bold tracking-[0.18em] text-brand uppercase">
@@ -32,7 +32,7 @@ export function Hero() {
         </div>
 
         <div className="relative">
-          <div className="shopnest-shadow rounded-[2rem] border border-white/80 bg-white/80 p-5 sm:p-7">
+          <div className="shopnest-shadow rounded-[2rem] border border-border bg-surface/90 p-5 sm:p-7">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-foreground">Explore ShopNest</p>
               <span className="rounded-full bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand">Fresh finds</span>

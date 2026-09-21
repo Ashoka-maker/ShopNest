@@ -1,16 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f6f8f7;
-  --foreground: #17231e;
-  --muted: #66756e;
-  --surface: #ffffff;
-  --border: #dfe8e3;
-  --brand: #167a52;
-  --brand-dark: #0d5b3b;
-  --accent: #e38a32;
-  --ink-soft: #edf5f0;
-  --shadow-soft: 0 12px 30px rgba(20, 54, 40, 0.07);
+  --background: #0b0d0c;
+  --foreground: #f7f4ee;
+  --muted: #a5aaa6;
+  --surface: #151817;
+  --border: #2a302d;
+  --brand: #f39a3d;
+  --brand-dark: #d97922;
+  --accent: #ffc15d;
+  --ink-soft: #24201a;
+  --shadow-soft: 0 18px 42px rgba(0, 0, 0, 0.3);
 }
 
 @theme inline {
@@ -79,6 +79,23 @@ textarea {
 .shopnest-focus:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--brand) 28%, transparent);
   outline-offset: 2px;
+}
+
+@keyframes shopnest-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.shopnest-rise {
+  animation: shopnest-rise 520ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
 }
 
 ::selection {

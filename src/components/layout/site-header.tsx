@@ -84,7 +84,7 @@ export function SiteHeader() {
           )}
           <Link 
             href="/cart" 
-            className="shopnest-focus relative inline-flex h-11 items-center justify-center rounded-full border border-border bg-surface px-5 text-sm font-semibold text-foreground shadow-sm transition hover:-translate-y-0.5 hover:border-brand/40 hover:text-brand"
+            className="shopnest-focus relative inline-flex h-11 items-center justify-center rounded-full border border-border bg-surface px-5 text-sm font-semibold text-foreground shadow-sm transition hover:-translate-y-0.5 hover:border-brand/40 hover:bg-ink-soft hover:text-brand"
             aria-label="Cart"
           >
             Cart
