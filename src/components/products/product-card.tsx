@@ -10,6 +10,7 @@ import type { Product } from "@/types/product";
 import { getAvailableInventoryById } from "@/lib/inventory-storage";
 import { getReviewSummary, REVIEWS_UPDATED_EVENT } from "@/lib/review-storage";
 import { WishlistButton } from "@/components/products/wishlist-button";
+import { SellerBadge } from "@/components/seller/seller-badge";
 
 type ProductCardProps = {
   product: Product;
@@ -27,10 +28,10 @@ export function ProductCard({ product }: ProductCardProps) {
   }, [product.id]);
 
   return (
-    <article className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+    <article className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm transition duration-300 hover:-translate-y-1 hover:border-brand/30 hover:shadow-lg">
       <Link
         href={`/products/${product.slug}`}
-        className="relative block aspect-[4/3] overflow-hidden bg-[#efe8dc]"
+        className="relative block aspect-[4/3] overflow-hidden bg-[#edf3ef]"
       >
         <Image
           src={product.imageUrl}
@@ -40,7 +41,7 @@ export function ProductCard({ product }: ProductCardProps) {
           className="object-cover transition duration-300 group-hover:scale-[1.03]"
         />
         {off > 0 ? (
-          <span className="absolute top-3 left-3 rounded-full bg-accent px-2.5 py-1 text-xs font-semibold text-white">
+          <span className="absolute top-3 left-3 rounded-full bg-accent px-2.5 py-1 text-xs font-bold text-white shadow-sm">
             {off}% off
           </span>
         ) : null}
@@ -52,10 +53,11 @@ export function ProductCard({ product }: ProductCardProps) {
       </Link>
       <WishlistButton productId={product.id} className="absolute top-3 right-3 z-10" />
 
-      <div className="flex flex-1 flex-col gap-2 p-4">
+      <div className="flex flex-1 flex-col gap-2 p-4 sm:p-5">
         <p className="text-xs font-medium tracking-wide text-muted uppercase">
           {category?.name}
         </p>
+        <p className="text-xs"><SellerBadge sellerId={product.sellerId} sellerName={product.sellerName} /></p>
         <h2 className="text-base leading-snug font-semibold">
           <Link
             href={`/products/${product.slug}`}
@@ -65,8 +67,8 @@ export function ProductCard({ product }: ProductCardProps) {
           </Link>
         </h2>
         <StarRating rating={reviewSummary.reviewCount ? reviewSummary.rating : product.rating} reviewCount={reviewSummary.reviewCount || product.reviewCount} />
-        <div className="mt-auto flex flex-wrap items-baseline gap-2 pt-1">
-          <span className="text-lg font-semibold">
+        <div className="mt-auto flex flex-wrap items-baseline gap-2 border-t border-border/70 pt-3">
+          <span className="text-xl font-bold tracking-tight">
             {formatCents(product.priceCents)}
           </span>
           {off > 0 && product.compareAtPriceCents ? (

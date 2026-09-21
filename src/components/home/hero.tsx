@@ -4,20 +4,19 @@ import { Container } from "@/components/layout/container";
 
 export function Hero() {
   return (
-    <section className="overflow-hidden">
-      <Container className="grid items-center gap-10 py-10 sm:py-14 lg:grid-cols-[1.1fr_0.9fr] lg:py-20">
+    <section className="overflow-hidden bg-[radial-gradient(circle_at_85%_10%,rgba(22,122,82,0.13),transparent_35%),linear-gradient(180deg,#f1f7f3_0%,#f6f8f7_100%)]">
+      <Container className="grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[1.1fr_0.9fr] lg:py-24">
         <div>
-          <p className="text-xs font-semibold tracking-[0.2em] text-accent uppercase">
-            Marketplace
+          <p className="inline-flex rounded-full bg-brand/10 px-3 py-1 text-xs font-bold tracking-[0.18em] text-brand uppercase">
+            Curated marketplace
           </p>
           <h1 className="mt-3 font-display text-4xl leading-[1.1] font-semibold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
             Find more.
             <span className="block text-brand">Nest better.</span>
           </h1>
-          <p className="mt-4 max-w-xl text-base leading-7 text-muted sm:text-lg">
-            ShopNest is a professional marketplace for browsing products from
-            trusted sellers — designed to grow into carts, orders, and store
-            management.
+          <p className="mt-5 max-w-xl text-base leading-7 text-muted sm:text-lg">
+            Discover thoughtful products from trusted sellers, with a calmer
+            way to browse, compare, and shop for everyday life.
           </p>
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
             <Link href="/products" className={`${buttonClassName("primary")} w-full sm:w-auto`}>
@@ -33,8 +32,11 @@ export function Hero() {
         </div>
 
         <div className="relative">
-          <div className="rounded-3xl border border-border bg-surface p-5 shadow-sm sm:p-6">
-            <p className="text-sm font-medium text-muted">Today on ShopNest</p>
+          <div className="shopnest-shadow rounded-[2rem] border border-white/80 bg-white/80 p-5 sm:p-7">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-foreground">Explore ShopNest</p>
+              <span className="rounded-full bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand">Fresh finds</span>
+            </div>
             <div className="mt-4 grid grid-cols-2 gap-3">
               {[
                 { label: "Home finds", tone: "bg-[#eef6f1]", href: "/products?category=home-living" },
@@ -45,7 +47,7 @@ export function Hero() {
                 <Link
                   key={card.label}
                   href={card.href}
-                  className={`rounded-2xl ${card.tone} px-4 py-8 text-sm font-semibold transition hover:brightness-[0.98]`}
+                  className={`rounded-2xl ${card.tone} px-4 py-8 text-sm font-semibold shadow-sm transition hover:-translate-y-1 hover:shadow-md`}
                 >
                   {card.label}
                 </Link>

@@ -6,13 +6,15 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { useAuth } from "@/lib/auth-context";
-import { getSellerByUserId, getSellerProducts, deleteSellerProduct } from "@/lib/seller-storage";
+import { getSellerByUserId, getSellerProducts, deleteSellerProduct, updateSellerProfile } from "@/lib/seller-storage";
 import type { Seller } from "@/types/seller";
 import type { SellerProduct } from "@/types/product";
 import { formatCents } from "@/lib/money";
 import { CATEGORIES } from "@/lib/constants";
 import { SellerOrdersSection } from "@/components/seller/seller-orders-section";
 import { SellerReviewsSection } from "@/components/seller/seller-reviews-section";
+import { SellerReturnRequestsSection } from "@/components/seller/seller-return-requests-section";
+import { SellerSupportSection } from "@/components/seller/seller-support-section";
 import { getAllOrders } from "@/lib/order-storage";
 import { getAvailableInventory, getSoldQuantity } from "@/lib/inventory-storage";
 
@@ -22,6 +24,7 @@ export function SellerDashboardPage() {
   const [seller, setSeller] = useState<Seller | null>(null);
   const [products, setProducts] = useState<SellerProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const [profileMessage, setProfileMessage] = useState("");
 
   useEffect(() => {
     if (!user) {
@@ -76,6 +79,20 @@ export function SellerDashboardPage() {
   const totalInventory = products.reduce((sum, p) => sum + p.inventory, 0);
   const totalRevenue = products.reduce((sum, p) => sum + (p.priceCents * p.inventory), 0);
   const orders = getAllOrders();
+  const saveProfile = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!seller) return;
+    const form = new FormData(event.currentTarget);
+    const updated = updateSellerProfile(seller.userId, {
+      storeName: String(form.get("storeName") || ""),
+      bio: String(form.get("bio") || ""),
+      logoUrl: String(form.get("logoUrl") || ""),
+      contactEmail: String(form.get("contactEmail") || ""),
+      contactPhone: String(form.get("contactPhone") || ""),
+    });
+    setProfileMessage(updated ? "Store profile updated." : "Unable to update store profile.");
+    if (updated) setSeller(updated);
+  };
 
   return (
     <Container className="py-8 sm:py-12">
@@ -223,7 +240,30 @@ export function SellerDashboardPage() {
         </div>
 
         <SellerOrdersSection sellerId={seller.id} />
+        <SellerReturnRequestsSection sellerId={seller.id} />
+        <SellerSupportSection sellerId={seller.id} userId={user?.id || seller.userId} userName={user?.name || seller.storeName} />
         <SellerReviewsSection sellerId={seller.id} />
+
+        <section className="mt-8 rounded-2xl border border-border bg-surface p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-lg font-semibold tracking-tight">Seller Profile / Store Settings</h2>
+              <p className="mt-1 text-sm text-muted">Verification is controlled by ShopNest administrators.</p>
+            </div>
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${seller.verificationStatus === "verified" ? "bg-blue-100 text-blue-700" : seller.verificationStatus === "rejected" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"}`}>
+              {seller.verificationStatus === "verified" ? "Verified" : seller.verificationStatus === "rejected" ? "Rejected" : "Pending verification"}
+            </span>
+          </div>
+          {seller.verificationNote ? <p className="mt-3 rounded-lg bg-background p-3 text-sm text-muted">Admin note: {seller.verificationNote}</p> : null}
+          <form onSubmit={saveProfile} className="mt-5 grid gap-4 sm:grid-cols-2">
+            <label className="text-sm font-medium">Store name<input name="storeName" defaultValue={seller.storeName} required className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-medium">Logo URL (optional)<input name="logoUrl" defaultValue={seller.logoUrl || ""} className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-medium">Contact email<input name="contactEmail" type="email" defaultValue={seller.contactEmail || ""} className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-medium">Contact phone<input name="contactPhone" defaultValue={seller.contactPhone || ""} className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-medium sm:col-span-2">Store description<textarea name="bio" defaultValue={seller.bio} required rows={4} className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-normal" /></label>
+            <div className="sm:col-span-2 flex items-center gap-3"><Button type="submit">Save profile</Button>{profileMessage ? <span className="text-sm text-brand">{profileMessage}</span> : null}</div>
+          </form>
+        </section>
 
         {/* Store Info */}
         <div className="mt-8 rounded-2xl border border-border bg-surface p-6">

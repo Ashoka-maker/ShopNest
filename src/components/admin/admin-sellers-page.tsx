@@ -6,7 +6,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { useAuth } from "@/lib/auth-context";
-import { getAllSellers, approveSeller, rejectSeller, toggleSellerActive } from "@/lib/admin-storage";
+import { getAllSellers, approveSeller, rejectSeller, toggleSellerActive, updateSellerVerification } from "@/lib/admin-storage";
+import { SELLERS_UPDATED_EVENT } from "@/lib/seller-storage";
 import type { Seller } from "@/types/seller";
 
 export function AdminSellersPage() {
@@ -14,6 +15,7 @@ export function AdminSellersPage() {
   const { user, isAdmin } = useAuth();
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
+  const [verificationNotes, setVerificationNotes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!user || !isAdmin) {
@@ -28,6 +30,12 @@ export function AdminSellersPage() {
     };
 
     loadSellers();
+    window.addEventListener(SELLERS_UPDATED_EVENT, loadSellers);
+    window.addEventListener("storage", loadSellers);
+    return () => {
+      window.removeEventListener(SELLERS_UPDATED_EVENT, loadSellers);
+      window.removeEventListener("storage", loadSellers);
+    };
   }, [user, isAdmin, router]);
 
   const handleApproveSeller = async (sellerId: string) => {
@@ -53,6 +61,12 @@ export function AdminSellersPage() {
     if (success) {
       const updatedSellers = getAllSellers();
       setSellers(updatedSellers);
+    }
+  };
+
+  const handleVerification = (sellerId: string, status: "pending" | "verified" | "rejected") => {
+    if (updateSellerVerification(sellerId, status, verificationNotes[sellerId])) {
+      setSellers(getAllSellers());
     }
   };
 
@@ -112,6 +126,7 @@ export function AdminSellersPage() {
                       <p className="text-xs text-muted">
                         Applied: {new Date(seller.createdAt).toLocaleDateString()}
                       </p>
+                      <p className="mt-2 text-xs font-semibold text-muted">Verification: {seller.verificationStatus || "Pending"}</p>
                     </div>
                     <div className="flex gap-2">
                       <Button
@@ -161,6 +176,9 @@ export function AdminSellersPage() {
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                      Verification
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
                       Active
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
@@ -178,6 +196,26 @@ export function AdminSellersPage() {
                         <div>
                           <p className="font-medium text-sm">{seller.storeName}</p>
                           <p className="text-xs text-muted">{seller.bio.substring(0, 50)}...</p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="space-y-2">
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+                            seller.verificationStatus === "verified" ? "bg-blue-100 text-blue-800" : seller.verificationStatus === "rejected" ? "bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800"
+                          }`}>
+                            {seller.verificationStatus === "verified" ? "Verified" : seller.verificationStatus === "rejected" ? "Rejected" : "Pending"}
+                          </span>
+                          <input
+                            value={verificationNotes[seller.id] ?? seller.verificationNote ?? ""}
+                            onChange={(event) => setVerificationNotes((current) => ({ ...current, [seller.id]: event.target.value }))}
+                            placeholder="Optional note"
+                            className="w-40 rounded-lg border border-border px-2 py-1 text-xs"
+                          />
+                          <div className="flex flex-wrap gap-1">
+                            <button type="button" onClick={() => handleVerification(seller.id, "verified")} className="text-xs font-semibold text-blue-700">Verify</button>
+                            <button type="button" onClick={() => handleVerification(seller.id, "rejected")} className="text-xs font-semibold text-red-700">Reject</button>
+                            <button type="button" onClick={() => handleVerification(seller.id, "pending")} className="text-xs font-semibold text-muted">Pending</button>
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">

@@ -1,14 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f7f4ee;
-  --foreground: #1c1917;
-  --muted: #78716c;
-  --surface: #fffdf8;
-  --border: #e7e0d4;
-  --brand: #1f6b4a;
-  --brand-dark: #164e36;
-  --accent: #c9782a;
+  --background: #f6f8f7;
+  --foreground: #17231e;
+  --muted: #66756e;
+  --surface: #ffffff;
+  --border: #dfe8e3;
+  --brand: #167a52;
+  --brand-dark: #0d5b3b;
+  --accent: #e38a32;
+  --ink-soft: #edf5f0;
+  --shadow-soft: 0 12px 30px rgba(20, 54, 40, 0.07);
 }
 
 @theme inline {
@@ -36,6 +38,47 @@ body {
   background: var(--background);
   color: var(--foreground);
   min-height: 100vh;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+
+a,
+button,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 180ms;
+  transition-timing-function: ease-out;
+}
+
+input,
+select,
+textarea {
+  border-radius: 0.8rem;
+}
+
+::placeholder {
+  color: color-mix(in srgb, var(--muted) 75%, white);
+}
+
+.shopnest-glass {
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  backdrop-filter: blur(16px);
+}
+
+.shopnest-shadow {
+  box-shadow: var(--shadow-soft);
+}
+
+.shopnest-focus:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand) 28%, transparent);
+  outline-offset: 2px;
 }
 
 ::selection {

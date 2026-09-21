@@ -52,6 +52,7 @@ export function SellerSignupPage() {
           createdAt: new Date().toISOString(),
           approvalStatus: "pending" as const,
           isActive: false,
+          verificationStatus: "pending" as const,
         };
 
         // Save seller to localStorage

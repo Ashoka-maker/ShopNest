@@ -19,8 +19,8 @@ export function SiteHeader() {
   const { user, signOut, isSeller, isAdmin } = useAuth();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/80 bg-background/90 backdrop-blur-md">
-      <Container className="flex h-16 items-center gap-3 sm:h-[4.25rem]">
+    <header className="shopnest-glass sticky top-0 z-40 border-b border-border/80 shadow-[0_4px_20px_rgba(20,54,40,0.04)]">
+      <Container className="flex h-[4.5rem] items-center gap-3 sm:h-20">
         <Link href="/" className="shrink-0" aria-label="ShopNest home">
           <Logo />
         </Link>
@@ -32,7 +32,7 @@ export function SiteHeader() {
             <Link
               key={link.href}
               href={link.href}
-              className="text-sm font-medium text-muted transition hover:text-foreground"
+              className="rounded-full px-3 py-2 text-sm font-semibold text-muted transition hover:bg-ink-soft hover:text-brand"
             >
               {link.label}
             </Link>
@@ -84,7 +84,7 @@ export function SiteHeader() {
           )}
           <Link 
             href="/cart" 
-            className="relative inline-flex h-11 items-center justify-center rounded-full border border-border bg-surface px-5 text-sm font-semibold text-foreground transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            className="shopnest-focus relative inline-flex h-11 items-center justify-center rounded-full border border-border bg-surface px-5 text-sm font-semibold text-foreground shadow-sm transition hover:-translate-y-0.5 hover:border-brand/40 hover:text-brand"
             aria-label="Cart"
           >
             Cart
@@ -96,7 +96,7 @@ export function SiteHeader() {
           </Link>
           <button
             type="button"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface lg:hidden"
+            className="shopnest-focus inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface shadow-sm lg:hidden"
             aria-expanded={menuOpen}
             aria-controls="mobile-nav"
             onClick={() => setMenuOpen((open) => !open)}

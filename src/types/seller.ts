@@ -6,4 +6,9 @@ export type Seller = {
   createdAt: string;
   approvalStatus: "pending" | "approved" | "rejected";
   isActive: boolean;
+  logoUrl?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  verificationStatus?: "pending" | "verified" | "rejected";
+  verificationNote?: string;
 };

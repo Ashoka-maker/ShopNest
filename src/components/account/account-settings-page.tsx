@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Container } from "@/components/layout/container";
 import { useAuth } from "@/lib/auth-context";
 
@@ -63,6 +64,7 @@ export function AccountSettingsPage() {
       <div className="mx-auto max-w-2xl">
         <h1 className="font-display text-3xl font-semibold tracking-tight">Account Settings</h1>
         <p className="mt-2 text-sm text-muted">Manage your ShopNest profile and password.</p>
+        <Link href="/support" className="mt-5 inline-flex rounded-full border border-brand px-4 py-2 text-sm font-semibold text-brand">Help & Support</Link>
         <div className="mt-8 space-y-6">
           <form onSubmit={submitProfile} className="rounded-2xl border border-border bg-surface p-6">
             <h2 className="font-semibold">Profile details</h2>

@@ -15,6 +15,7 @@ import { discountPercent, formatCents } from "@/lib/money";
 import { getReviewSummary, REVIEWS_UPDATED_EVENT } from "@/lib/review-storage";
 import { ProductReviews } from "@/components/products/product-reviews";
 import { WishlistButton } from "@/components/products/wishlist-button";
+import { SellerBadge } from "@/components/seller/seller-badge";
 
 export default function ProductDetailsPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -49,7 +50,7 @@ export default function ProductDetailsPage() {
 
   return (
     <Container className="py-8 sm:py-12">
-      <nav className="text-sm text-muted">
+      <nav className="text-xs font-medium text-muted">
         <Link href="/products" className="hover:text-foreground">
           Shop
         </Link>
@@ -87,10 +88,9 @@ export default function ProductDetailsPage() {
           ))}
         </div>
 
-        <div>
-          <p className="text-xs font-semibold tracking-[0.18em] text-accent uppercase">
-            {category?.name} · {product.sellerName}
-          </p>
+        <div className="rounded-[2rem] border border-border bg-surface p-5 shadow-sm sm:p-8">
+          <p className="text-xs font-semibold tracking-[0.18em] text-accent uppercase">{category?.name}</p>
+          <div className="mt-2 text-sm"><SellerBadge sellerId={product.sellerId} sellerName={product.sellerName} /> · <Link href={`/sellers/${product.sellerId}`} className="text-brand hover:text-brand-dark">View Seller Store</Link></div>
           <div className="mt-2 flex items-start justify-between gap-4">
             <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
               {product.name}
@@ -105,8 +105,8 @@ export default function ProductDetailsPage() {
             />
           </div>
 
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            <span className="text-3xl font-semibold">
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <span className="text-3xl font-bold tracking-tight">
               {formatCents(product.priceCents)}
             </span>
             {off > 0 && product.compareAtPriceCents ? (
@@ -134,7 +134,7 @@ export default function ProductDetailsPage() {
             ))}
           </ul>
 
-          <p className="mt-6 text-sm text-muted">
+          <p className="mt-6 rounded-xl bg-brand/5 px-4 py-3 text-sm font-medium text-brand">
             {getAvailableInventoryById(product.id, product.inventory) > 0
               ? `${getAvailableInventoryById(product.id, product.inventory)} in stock`
               : "Out of stock"}

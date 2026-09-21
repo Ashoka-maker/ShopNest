@@ -4,6 +4,7 @@ import type { SellerProduct, ProductFormData } from "@/types/product";
 const SELLERS_STORAGE_KEY = "shopnest_sellers";
 const SELLER_PRODUCTS_STORAGE_KEY = "shopnest_seller_products";
 export const SELLER_PRODUCTS_UPDATED_EVENT = "shopnest:seller-products-updated";
+export const SELLERS_UPDATED_EVENT = "shopnest:sellers-updated";
 
 export const normalizeSellerProduct = (product: SellerProduct): SellerProduct => {
   const approvalStatus =
@@ -31,6 +32,7 @@ const saveStoredSellers = (sellers: Seller[]) => {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(SELLERS_STORAGE_KEY, JSON.stringify(sellers));
+    window.dispatchEvent(new CustomEvent(SELLERS_UPDATED_EVENT));
   } catch (e) {
     console.error("Failed to save sellers:", e);
   }
@@ -58,7 +60,7 @@ const saveStoredSellerProducts = (products: SellerProduct[]) => {
 
 export function saveSeller(seller: Seller): void {
   const sellers = getStoredSellers();
-  sellers.push(seller);
+  sellers.push({ verificationStatus: "pending", ...seller });
   saveStoredSellers(sellers);
 }
 
@@ -76,6 +78,23 @@ export function updateSeller(userId: string, updates: Partial<Seller>): Seller |
   sellers[index] = { ...sellers[index], ...updates };
   saveStoredSellers(sellers);
   return sellers[index];
+}
+
+export function updateSellerProfile(
+  userId: string,
+  updates: Pick<Seller, "storeName" | "bio" | "logoUrl" | "contactEmail" | "contactPhone">,
+): Seller | null {
+  return updateSeller(userId, {
+    storeName: updates.storeName.trim(),
+    bio: updates.bio.trim(),
+    logoUrl: updates.logoUrl?.trim() || undefined,
+    contactEmail: updates.contactEmail?.trim() || undefined,
+    contactPhone: updates.contactPhone?.trim() || undefined,
+  });
+}
+
+export function getSellerById(sellerId: string): Seller | null {
+  return getStoredSellers().find((seller) => seller.id === sellerId) ?? null;
 }
 
 export function generateSellerId(): string {

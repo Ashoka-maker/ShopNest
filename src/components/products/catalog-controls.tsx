@@ -21,7 +21,8 @@ export function CatalogControls({ query, resultCount }: CatalogControlsProps) {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+          <p className="text-xs font-bold tracking-[0.18em] text-brand uppercase">The ShopNest edit</p>
+          <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
             {selectedCategory ? `Shop ${selectedCategory.name}` : "Shop products"}
           </h1>
           <p className="mt-1 text-sm text-muted">
@@ -102,7 +103,7 @@ function FilterChip({
     <Link
       href={href}
       className={cn(
-        "inline-flex h-10 shrink-0 items-center rounded-full border px-4 text-sm font-medium transition",
+        "inline-flex h-10 shrink-0 items-center rounded-full border px-4 text-sm font-semibold transition",
         active
           ? "border-brand bg-brand text-white"
           : "border-border bg-surface text-foreground hover:border-brand/40",

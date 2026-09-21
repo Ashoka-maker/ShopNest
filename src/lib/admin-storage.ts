@@ -178,6 +178,29 @@ export function toggleSellerActive(sellerId: string): boolean {
   return true;
 }
 
+export function updateSellerVerification(
+  sellerId: string,
+  status: "pending" | "verified" | "rejected",
+  note?: string,
+): boolean {
+  const sellers = getAllSellers();
+  const index = sellers.findIndex((seller) => seller.id === sellerId);
+  if (index < 0) return false;
+  sellers[index] = {
+    ...sellers[index],
+    verificationStatus: status,
+    verificationNote: note?.trim() || undefined,
+  };
+  localStorage.setItem("shopnest_sellers", JSON.stringify(sellers));
+  window.dispatchEvent(new CustomEvent("shopnest:sellers-updated"));
+  logAdminAction({
+    type: status === "verified" ? "seller_approved" : "seller_rejected",
+    description: `${status === "verified" ? "Verified" : status === "rejected" ? "Rejected" : "Reset verification for"} seller ${sellers[index].storeName}`,
+    targetId: sellerId,
+  });
+  return true;
+}
+
 export function getAllSellerProducts(): SellerProduct[] {
   if (typeof window === "undefined") return [];
   try {

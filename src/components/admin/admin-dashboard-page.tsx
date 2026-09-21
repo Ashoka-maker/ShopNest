@@ -15,6 +15,8 @@ import { getAllOrders, ORDERS_UPDATED_EVENT } from "@/lib/order-storage";
 import { getAllProducts } from "@/features/products/data";
 import { SELLER_PRODUCTS_UPDATED_EVENT } from "@/lib/seller-storage";
 import type { Order } from "@/types/order";
+import { AdminReturnManagementSection } from "@/components/admin/admin-return-management-section";
+import { AdminSupportSection } from "@/components/admin/admin-support-section";
 
 type DashboardAnalytics = {
   totalOrders: number;
@@ -186,6 +188,9 @@ export function AdminDashboardPage() {
          </>
         ) : null}
 
+        <AdminReturnManagementSection isAdmin={isAdmin} />
+        <AdminSupportSection userId={user?.id || ""} userName={user?.name || "Admin"} isAdmin={isAdmin} />
+
         {/* Quick Actions */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <Link href="/admin/users">
@@ -197,7 +202,7 @@ export function AdminDashboardPage() {
           <Link href="/admin/sellers">
             <div className="rounded-2xl border border-border bg-surface p-6 hover:border-brand/40 transition cursor-pointer">
               <h3 className="font-semibold mb-2">Seller Management</h3>
-              <p className="text-sm text-muted">Approve/reject sellers</p>
+              <p className="text-sm text-muted">Approve sellers and manage verification</p>
             </div>
           </Link>
           <Link href="/admin/products">

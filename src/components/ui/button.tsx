@@ -9,12 +9,12 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function buttonClassName(variant: ButtonVariant = "primary") {
   return cn(
-    "inline-flex h-11 items-center justify-center rounded-full px-5 text-sm font-semibold transition",
+    "shopnest-focus inline-flex h-11 items-center justify-center rounded-full px-5 text-sm font-semibold shadow-sm transition hover:-translate-y-0.5",
     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
     variant === "primary" &&
-      "bg-brand text-white hover:bg-brand-dark active:bg-brand-dark",
+      "bg-brand text-white hover:bg-brand-dark active:bg-brand-dark hover:shadow-md",
     variant === "secondary" &&
-      "border border-border bg-surface text-foreground hover:bg-white",
+      "border border-border bg-surface text-foreground hover:border-brand/40 hover:bg-white",
     variant === "ghost" && "text-foreground hover:bg-white/70",
   );
 }

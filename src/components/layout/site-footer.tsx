@@ -5,20 +5,20 @@ import { Logo } from "@/components/layout/logo";
 
 export function SiteFooter() {
   return (
-    <footer className="mt-16 border-t border-border bg-white/50">
-      <Container className="grid gap-8 py-10 sm:grid-cols-2 lg:grid-cols-4">
+    <footer className="mt-20 border-t border-border bg-[#10251c] text-white">
+      <Container className="grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-4">
         <div className="sm:col-span-2">
           <Link href="/" aria-label="ShopNest home">
             <Logo />
           </Link>
-          <p className="mt-3 max-w-sm text-sm leading-6 text-muted">
-            A clean marketplace for customers, sellers, and the products that
-            belong in every nest.
+          <p className="mt-4 max-w-sm text-sm leading-6 text-white/65">
+            A considered marketplace for discovering useful products from
+            trusted independent sellers.
           </p>
         </div>
         <div>
-          <p className="text-sm font-semibold">Shop</p>
-          <ul className="mt-3 space-y-2 text-sm text-muted">
+          <p className="text-sm font-semibold text-white">Shop</p>
+          <ul className="mt-4 space-y-3 text-sm text-white/65">
             <li>
               <Link href="/products" className="hover:text-foreground">
                 Browse products
@@ -42,16 +42,16 @@ export function SiteFooter() {
         <div>
           <p className="text-sm font-semibold">Sell</p>
           <ul className="mt-3 space-y-2 text-sm text-muted">
-            <li>Open a store</li>
-            <li>Seller tools</li>
-            <li>Support</li>
+            <li><Link href="/seller/signup" className="hover:text-white">Open a store</Link></li>
+            <li><Link href="/support" className="hover:text-white">Seller tools</Link></li>
+            <li><Link href="/support" className="hover:text-white">Support</Link></li>
           </ul>
         </div>
       </Container>
       <div className="border-t border-border">
-        <Container className="flex flex-col gap-2 py-4 text-xs text-muted sm:flex-row sm:items-center sm:justify-between">
+        <Container className="flex flex-col gap-2 border-white/10 py-5 text-xs text-white/50 sm:flex-row sm:items-center sm:justify-between">
           <p>{`© ${new Date().getFullYear()} ${SITE_NAME}. All rights reserved.`}</p>
-          <p>Catalog is live — checkout and accounts come later.</p>
+          <p>Made for better everyday shopping.</p>
         </Container>
       </div>
     </footer>

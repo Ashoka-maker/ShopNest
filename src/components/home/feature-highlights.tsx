@@ -25,7 +25,7 @@ export function FeatureHighlights() {
         {highlights.map((item) => (
           <article
             key={item.title}
-            className="rounded-2xl bg-white/70 p-5 ring-1 ring-border"
+            className="rounded-2xl border border-border bg-surface p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
           >
             <h3 className="text-base font-semibold">{item.title}</h3>
             <p className="mt-2 text-sm leading-6 text-muted">{item.body}</p>

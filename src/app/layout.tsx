@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { Outfit, Source_Serif_4 } from "next/font/google";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
+import { FloatingSupportButton } from "@/components/layout/floating-support-button";
 import { CartProvider } from "@/lib/cart-context";
 import { AuthProvider } from "@/lib/auth-context";
 import "./globals.css";
@@ -42,6 +43,7 @@ export default function RootLayout({
               </Suspense>
               <main className="flex-1">{children}</main>
               <SiteFooter />
+              <FloatingSupportButton />
             </div>
           </AuthProvider>
         </CartProvider>
