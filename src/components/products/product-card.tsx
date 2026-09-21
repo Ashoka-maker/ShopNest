@@ -12,6 +12,7 @@ import { getReviewSummary, REVIEWS_UPDATED_EVENT } from "@/lib/review-storage";
 import { WishlistButton } from "@/components/products/wishlist-button";
 import { SellerBadge } from "@/components/seller/seller-badge";
 import { AddToCartButton } from "@/components/products/add-to-cart-button";
+import { BuyNowButton } from "@/components/products/buy-now-button";
 
 type ProductCardProps = {
   product: Product;
@@ -78,7 +79,10 @@ export function ProductCard({ product }: ProductCardProps) {
             </span>
           ) : null}
         </div>
-        <AddToCartButton productId={product.id} disabled={availableInventory <= 0} className="mt-2" />
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <AddToCartButton productId={product.id} disabled={availableInventory <= 0} />
+          <BuyNowButton productId={product.id} sizes={product.sizes} disabled={availableInventory <= 0} />
+        </div>
       </div>
     </article>
   );
