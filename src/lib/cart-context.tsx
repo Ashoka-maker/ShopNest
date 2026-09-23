@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import type { Cart, CartItem } from "@/types/cart";
 import type { ProductSize } from "@/types/product";
 
@@ -38,18 +38,26 @@ const saveStoredCart = (cart: Cart) => {
 };
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [cart, setCart] = useState<Cart>({ items: [] });
+  const [isHydrated, setIsHydrated] = useState(false);
+  const [cart, setCart] = useState<Cart>(() => {
+    // Initialize with stored cart immediately to avoid race condition
+    if (typeof window !== "undefined") {
+      return getStoredCart();
+    }
+    return { items: [] };
+  });
 
-  // Load cart from localStorage on mount
+  // Mark as hydrated after initial mount
   useEffect(() => {
-    const storedCart = getStoredCart();
-    setCart(storedCart);
+    setIsHydrated(true);
   }, []);
 
-  // Save cart to localStorage whenever it changes
+  // Save cart to localStorage whenever it changes (but only after hydration)
   useEffect(() => {
-    saveStoredCart(cart);
-  }, [cart]);
+    if (isHydrated) {
+      saveStoredCart(cart);
+    }
+  }, [cart, isHydrated]);
 
   const addToCart = (productId: string, quantity = 1, size?: ProductSize) => {
     setCart((prevCart) => {
