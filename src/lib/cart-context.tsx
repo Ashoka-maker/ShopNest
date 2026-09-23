@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import type { Cart, CartItem } from "@/types/cart";
 import type { ProductSize } from "@/types/product";
 
@@ -15,8 +15,41 @@ type CartContextType = {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
+const CART_STORAGE_KEY = "shopnest_cart";
+
+// Helper functions for localStorage
+const getStoredCart = (): Cart => {
+  if (typeof window === "undefined") return { items: [] };
+  try {
+    const stored = localStorage.getItem(CART_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : { items: [] };
+  } catch {
+    return { items: [] };
+  }
+};
+
+const saveStoredCart = (cart: Cart) => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+  } catch (e) {
+    console.error("Failed to save cart:", e);
+  }
+};
+
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<Cart>({ items: [] });
+
+  // Load cart from localStorage on mount
+  useEffect(() => {
+    const storedCart = getStoredCart();
+    setCart(storedCart);
+  }, []);
+
+  // Save cart to localStorage whenever it changes
+  useEffect(() => {
+    saveStoredCart(cart);
+  }, [cart]);
 
   const addToCart = (productId: string, quantity = 1, size?: ProductSize) => {
     setCart((prevCart) => {
@@ -41,11 +74,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const removeFromCart = (productId: string, size?: ProductSize) => {
-    setCart((prevCart) => ({
-      items: prevCart.items.filter(
-        (item) => !(item.productId === productId && (size === undefined || item.size === size)),
-      ),
-    }));
+    setCart((prevCart) => {
+      const updatedCart = {
+        items: prevCart.items.filter(
+          (item) => !(item.productId === productId && (size === undefined || item.size === size)),
+        ),
+      };
+      return updatedCart;
+    });
   };
 
   const updateQuantity = (productId: string, quantity: number, size?: ProductSize) => {
@@ -63,6 +99,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearCart = () => {
     setCart({ items: [] });
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(CART_STORAGE_KEY);
+    }
   };
 
   const getCartCount = () => {
