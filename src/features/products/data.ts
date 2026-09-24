@@ -1,8 +1,12 @@
 import type { Product } from "@/types/product";
 import { deleteSellerProduct, getSellerProducts, saveSellerProduct } from "@/lib/seller-storage";
+import { getPublicProducts, updateProductModerationInSupabase } from "@/lib/supabase/product-repository";
+import { getDataSourceMode } from "@/lib/adapters/config";
 
 const PRODUCT_CATALOG_KEY = "shopnest_product_catalog";
 export const PRODUCT_CATALOG_UPDATED_EVENT = "shopnest:product-catalog-updated";
+export const SUPABASE_PRODUCTS_UPDATED_EVENT = "shopnest:supabase-products-updated";
+let supabaseProducts: Product[] | null = null;
 type ProductCatalogState = {
   products: Product[];
   deletedProductIds: string[];
@@ -68,6 +72,32 @@ export function saveCatalogProduct(product: Product): boolean {
   if (product.id.startsWith("p-") && getSellerProducts("").some((item) => item.id === product.id)) {
     saveSellerProduct({ ...product, updatedAt: new Date().toISOString(), createdAt: product.createdAt ?? new Date().toISOString(), approvalStatus: product.approvalStatus === "rejected" ? "rejected" : product.approvalStatus === "draft" ? "pending" : "approved" }, product.sellerId);
   }
+  const useSupabase = getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid";
+  if (useSupabase && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(product.id)) {
+    void updateProductModerationInSupabase(product.id, product.approvalStatus, product.publishStatus)
+      .then(() => {
+        if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(PRODUCT_CATALOG_UPDATED_EVENT));
+      })
+      .catch((error: unknown) => console.error("Unable to update Supabase product moderation:", error));
+  }
+  return true;
+}
+
+export async function moderateCatalogProduct(product: Product): Promise<boolean> {
+  const useSupabase = getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid";
+  const isSupabaseProduct = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(product.id);
+
+  if (useSupabase && isSupabaseProduct) {
+    try {
+      await updateProductModerationInSupabase(product.id, product.approvalStatus, product.publishStatus);
+    } catch (error) {
+      console.error("Unable to update Supabase product moderation; retaining local catalog:", error);
+      saveCatalogProduct(product);
+      return false;
+    }
+  }
+
+  saveCatalogProduct(product);
   return true;
 }
 
@@ -644,9 +674,24 @@ export function getRelatedProducts(product: Product, limit = 4) {
 }
 
 export function getAllProducts(): Product[] {
-  return readCatalogState().products.filter(
+  const products = supabaseProducts ?? readCatalogState().products;
+  return products.filter(
     (product) => product.approvalStatus === "approved" && product.publishStatus === "published",
   );
+}
+
+export async function loadSupabaseProducts(): Promise<Product[]> {
+  try {
+    const products = await getPublicProducts();
+    supabaseProducts = products;
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(SUPABASE_PRODUCTS_UPDATED_EVENT));
+    }
+    return products;
+  } catch (error) {
+    console.error("Supabase product read failed; retaining local catalog during migration:", error);
+    return getAllProducts();
+  }
 }
 
 // Export PRODUCTS for backward compatibility

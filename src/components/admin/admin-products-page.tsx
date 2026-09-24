@@ -7,10 +7,18 @@ import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { useAuth } from "@/lib/auth-context";
 import { CATEGORIES } from "@/lib/constants";
-import { deleteCatalogProduct, getCatalogProductsForAdmin, PRODUCT_CATALOG_UPDATED_EVENT, saveCatalogProduct } from "@/features/products/data";
+import { deleteCatalogProduct, getCatalogProductsForAdmin, moderateCatalogProduct, PRODUCT_CATALOG_UPDATED_EVENT } from "@/features/products/data";
 import { formatCents } from "@/lib/money";
 import { getAvailableInventoryById } from "@/lib/inventory-storage";
 import type { Product, ProductCategorySlug, ProductSize } from "@/types/product";
+import { getDataSourceMode } from "@/lib/adapters/config";
+import {
+  createAdminProductInSupabase,
+  deleteProductFromSupabase,
+  getAdminProductsFromSupabase,
+  updateAdminProductInSupabase,
+  updateProductModerationInSupabase,
+} from "@/lib/supabase/product-repository";
 
 type FormState = {
   name: string; description: string; price: string; compareAt: string; category: ProductCategorySlug;
@@ -31,14 +39,29 @@ export function AdminProductsPage() {
   const [sort, setSort] = useState("newest");
   const [confirming, setConfirming] = useState<Product | null>(null);
 
-  const load = () => setProducts(getCatalogProductsForAdmin());
+  const useSupabase = getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid";
+  const saveCatalogProduct = (product: Product) => {
+    void moderateCatalogProduct(product);
+  };
+  const load = async () => {
+    if (useSupabase) {
+      try {
+        setProducts(await getAdminProductsFromSupabase());
+        return;
+      } catch (error) {
+        console.error("Unable to load Supabase admin products; retaining local catalog:", error);
+      }
+    }
+    setProducts(getCatalogProductsForAdmin());
+  };
   useEffect(() => {
     if (!user || !isAdmin) { router.push("/admin/login"); return; }
-    load();
-    window.addEventListener(PRODUCT_CATALOG_UPDATED_EVENT, load);
-    window.addEventListener("storage", load);
-    return () => { window.removeEventListener(PRODUCT_CATALOG_UPDATED_EVENT, load); window.removeEventListener("storage", load); };
-  }, [user, isAdmin, router]);
+    void load();
+    const refresh = () => void load();
+    window.addEventListener(PRODUCT_CATALOG_UPDATED_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => { window.removeEventListener(PRODUCT_CATALOG_UPDATED_EVENT, refresh); window.removeEventListener("storage", refresh); };
+  }, [user, isAdmin, router, useSupabase]);
 
   const visible = useMemo(() => products.filter((product) => {
     const matchesQuery = `${product.name} ${product.sellerName} ${product.slug}`.toLowerCase().includes(query.toLowerCase());
@@ -51,7 +74,7 @@ export function AdminProductsPage() {
     setEditing(product);
     setForm({ name: product.name, description: product.description, price: String(product.priceCents / 100), compareAt: product.compareAtPriceCents ? String(product.compareAtPriceCents / 100) : "", category: product.category, inventory: String(product.inventory), imageUrl: product.imageUrl, sellerName: product.sellerName, sellerId: product.sellerId, sizes: product.sizes || [] });
   };
-  const save = (event: React.FormEvent) => {
+  const save = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!form.name.trim() || !form.description.trim() || !form.price || !form.imageUrl.trim() || !form.sellerName.trim()) return;
     const base = editing || {
@@ -64,10 +87,50 @@ export function AdminProductsPage() {
       category: form.category, inventory: Math.max(0, Number(form.inventory) || 0), imageUrl: form.imageUrl.trim(), sellerName: form.sellerName.trim(), sellerId: form.sellerId.trim() || "shopnest-admin", sizes: form.sizes, updatedAt: new Date().toISOString(),
       approvalStatus: editing?.approvalStatus || "approved", publishStatus: editing?.publishStatus || "published",
     };
-    saveCatalogProduct({ ...product, rating: editing?.rating || 0, reviewCount: editing?.reviewCount || 0 });
-    setEditing(null); setForm(emptyForm); load();
+    if (useSupabase) {
+      try {
+        if (editing) await updateAdminProductInSupabase({ ...product, sellerId: editing.sellerId }, {
+          name: product.name,
+          description: product.description,
+          highlights: product.highlights.join(", "),
+          priceCents: product.priceCents,
+          compareAtPriceCents: product.compareAtPriceCents,
+          category: product.category,
+          inventory: product.inventory,
+          imageUrl: product.imageUrl,
+          sizes: product.sizes || [],
+          inventoryBySize: product.inventoryBySize,
+        });
+        else await createAdminProductInSupabase({
+          name: product.name,
+          description: product.description,
+          highlights: product.highlights.join(", "),
+          priceCents: product.priceCents,
+          compareAtPriceCents: product.compareAtPriceCents,
+          category: product.category,
+          inventory: product.inventory,
+          imageUrl: product.imageUrl,
+          sizes: product.sizes || [],
+          inventoryBySize: product.inventoryBySize,
+        });
+      } catch (error) {
+        console.error("Unable to save Supabase admin product:", error);
+        return;
+      }
+    } else {
+      saveCatalogProduct({ ...product, rating: editing?.rating || 0, reviewCount: editing?.reviewCount || 0 });
+    }
+    setEditing(null); setForm(emptyForm); void load();
   };
-  const confirmDelete = () => { if (confirming) { deleteCatalogProduct(confirming.id); setConfirming(null); load(); } };
+  const confirmDelete = async () => {
+    if (!confirming) return;
+    if (useSupabase) {
+      try { await deleteProductFromSupabase(confirming.id); } catch (error) { console.error("Unable to delete Supabase product:", error); return; }
+    } else {
+      deleteCatalogProduct(confirming.id);
+    }
+    setConfirming(null); void load();
+  };
 
   return <Container className="py-8 sm:py-12"><div className="mx-auto max-w-7xl">
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-brand">Admin catalog</p><h1 className="mt-2 font-display text-3xl font-semibold sm:text-4xl">Product Management</h1><p className="mt-2 text-muted">Manage every product, regardless of seller ownership.</p></div><Button onClick={() => { setEditing(null); setForm(emptyForm); }}>Add product</Button></div>
