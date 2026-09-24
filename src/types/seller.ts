@@ -1,6 +1,7 @@
 export type Seller = {
   id: string;
   userId: string;
+  supabaseSellerId?: string;
   storeName: string;
   bio: string;
   createdAt: string;
