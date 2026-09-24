@@ -42,7 +42,12 @@ export function shouldUseSupabase(dataType: string): boolean {
  */
 export abstract class DataSourceAdapter<T, CreateInput, UpdateInput> {
   protected mode: DataSourceMode;
-  protected supabase = createClient();
+  private supabaseClient?: ReturnType<typeof createClient>;
+
+  protected get supabase() {
+    this.supabaseClient ??= createClient();
+    return this.supabaseClient;
+  }
 
   constructor() {
     this.mode = getDataSourceMode();
