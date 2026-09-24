@@ -23,20 +23,32 @@ function saveOverrides(overrides: InventoryOverride) {
   localStorage.setItem(INVENTORY_OVERRIDES_KEY, JSON.stringify(overrides));
 }
 
-export function getAvailableInventory(product: Pick<Product, "id" | "inventory">): number {
-  const fullProduct = getAllProducts().find((candidate) => candidate.id === product.id);
-  if (fullProduct?.sizes?.length) {
-    return fullProduct.sizes.reduce((total, size) => total + getAvailableInventoryForSize(fullProduct, size), 0);
+export function getAvailableInventory(product: Pick<Product, "id" | "inventory" | "sizes" | "inventoryBySize">): number {
+  if (product.inventoryBySize && Object.keys(product.inventoryBySize).length > 0) {
+    return Object.values(product.inventoryBySize).reduce((total, quantity) => total + Math.max(0, quantity ?? 0), 0);
   }
-  return Math.max(0, getOverrides()[product.id] ?? product.inventory);
+  if (product.sizes?.length) {
+    return product.sizes.reduce((total, size) => total + getAvailableInventoryForSize(product, size), 0);
+  }
+  return Math.max(0, product.inventory);
 }
 
-export function getAvailableInventoryById(productId: string, fallback: number): number {
-  const product = getAllProducts().find((candidate) => candidate.id === productId);
-  return product ? getAvailableInventory(product) : Math.max(0, getOverrides()[productId] ?? fallback);
+export function getAvailableInventoryById(product: Pick<Product, "id" | "inventory" | "sizes" | "inventoryBySize">): number;
+export function getAvailableInventoryById(productId: string, fallback: number): number;
+export function getAvailableInventoryById(
+  productOrId: Pick<Product, "id" | "inventory" | "sizes" | "inventoryBySize"> | string,
+  fallback?: number,
+): number {
+  if (typeof productOrId === "string") {
+    return Math.max(0, fallback ?? 0);
+  }
+  return getAvailableInventory(productOrId);
 }
 
-export function getAvailableInventoryForSize(product: Product, size: ProductSize): number {
+export function getAvailableInventoryForSize(
+  product: Pick<Product, "inventoryBySize">,
+  size: ProductSize,
+): number {
   return Math.max(0, product.inventoryBySize?.[size] ?? 0);
 }
 
