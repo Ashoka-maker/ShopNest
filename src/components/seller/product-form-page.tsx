@@ -15,7 +15,14 @@ import {
 } from "@/lib/seller-storage";
 import { CATEGORIES } from "@/lib/constants";
 import { formatCents } from "@/lib/money";
-import { PRODUCT_SIZES, type ProductFormData, type SellerProduct } from "@/types/product";
+import { PRODUCT_SIZES, type Product, type ProductFormData, type SellerProduct } from "@/types/product";
+import { getDataSourceMode } from "@/lib/adapters/config";
+import {
+  createSellerProductInSupabase,
+  getSellerIdForUser,
+  getSellerProductsFromSupabase,
+  updateSellerProductInSupabase,
+} from "@/lib/supabase/product-repository";
 
 type ProductFormPageProps = {
   mode: "create" | "edit";
@@ -27,6 +34,8 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
   const { user } = useAuth();
   const [seller, setSeller] = useState<any>(null);
   const [existingProduct, setExistingProduct] = useState<SellerProduct | null>(null);
+  const [supabaseSellerId, setSupabaseSellerId] = useState<string | null>(null);
+  const [supabaseProductId, setSupabaseProductId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageError, setImageError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -57,25 +66,48 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
       }
       setSeller(sellerData);
 
+      const useSupabase = getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid";
+      let remoteProduct: Product | null = null;
+      if (useSupabase) {
+        try {
+          const remoteSellerId = await getSellerIdForUser(user.id);
+          setSupabaseSellerId(remoteSellerId);
+          if (remoteSellerId && mode === "edit") {
+            const remoteProducts = await getSellerProductsFromSupabase(remoteSellerId);
+            const requestedId = (await params)?.id ?? "";
+            const localProduct = getSellerProductById(requestedId);
+            remoteProduct = remoteProducts.find((product) => product.id === requestedId)
+              ?? remoteProducts.find((product) => product.slug === localProduct?.slug)
+              ?? null;
+            setSupabaseProductId(remoteProduct?.id ?? null);
+          }
+        } catch (error) {
+          console.error("Unable to load Supabase seller mapping; retaining local product editing:", error);
+        }
+      }
+
       if (mode === "edit" && params) {
         const { id } = await params;
         const product = getSellerProductById(id);
-        if (!product || product.sellerId !== sellerData.id) {
+        const productToEdit = remoteProduct ?? product;
+        if (!productToEdit || (!remoteProduct && productToEdit.sellerId !== sellerData.id)) {
           router.push("/seller/dashboard");
           return;
         }
-        setExistingProduct(product);
+        setExistingProduct(remoteProduct ? null : product);
         setFormData({
-          name: product.name,
-          description: product.description,
-          highlights: product.highlights.join(", "),
-          priceCents: product.priceCents,
-          compareAtPriceCents: product.compareAtPriceCents,
-          category: product.category,
-          inventory: product.inventory,
-          imageUrl: product.imageUrl,
-          sizes: product.sizes ?? [],
-          inventoryBySize: product.inventoryBySize ?? {},
+          name: productToEdit.name,
+          description: productToEdit.description,
+          highlights: productToEdit.highlights.join(", "),
+          priceCents: productToEdit.priceCents,
+          compareAtPriceCents: productToEdit.compareAtPriceCents,
+          category: productToEdit.category,
+          inventory: productToEdit.sizes?.length
+            ? productToEdit.sizes.reduce((total, size) => total + (productToEdit.inventoryBySize?.[size] ?? 0), 0)
+            : productToEdit.inventory,
+          imageUrl: productToEdit.imageUrl,
+          sizes: productToEdit.sizes ?? [],
+          inventoryBySize: productToEdit.inventoryBySize ?? {},
         });
       }
 
@@ -133,7 +165,54 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
     try {
-      if (mode === "create") {
+      const useSupabase = (getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid") && supabaseSellerId;
+      if (useSupabase && mode === "create") {
+        const cachedProduct = createSellerProductFromData(formData, seller.id, seller.storeName);
+        const remoteProduct = await createSellerProductInSupabase(formData, supabaseSellerId, cachedProduct.slug);
+        saveSellerProduct({
+          ...cachedProduct,
+          id: remoteProduct.id,
+          sellerName: seller.storeName,
+          name: remoteProduct.name,
+          description: remoteProduct.description,
+          highlights: remoteProduct.highlights,
+          priceCents: remoteProduct.priceCents,
+          compareAtPriceCents: remoteProduct.compareAtPriceCents,
+          imageUrl: remoteProduct.imageUrl,
+          gallery: remoteProduct.gallery,
+          inventory: remoteProduct.inventory,
+          sizes: remoteProduct.sizes,
+          inventoryBySize: remoteProduct.inventoryBySize,
+          createdAt: remoteProduct.createdAt ?? cachedProduct.createdAt,
+          updatedAt: remoteProduct.updatedAt ?? cachedProduct.updatedAt,
+          approvalStatus: remoteProduct.approvalStatus ?? "pending",
+          publishStatus: remoteProduct.publishStatus ?? "unpublished",
+        });
+      } else if (useSupabase && mode === "edit" && supabaseSellerId) {
+        const cachedProduct = existingProduct ?? createSellerProductFromData(formData, seller.id, seller.storeName);
+        const remoteProduct = supabaseProductId
+          ? await updateSellerProductInSupabase(supabaseProductId, formData, supabaseSellerId)
+          : await createSellerProductInSupabase(formData, supabaseSellerId, cachedProduct.slug);
+        saveSellerProduct({
+          ...cachedProduct,
+          id: remoteProduct.id,
+          sellerName: seller.storeName,
+          name: remoteProduct.name,
+          description: remoteProduct.description,
+          highlights: remoteProduct.highlights,
+          priceCents: remoteProduct.priceCents,
+          compareAtPriceCents: remoteProduct.compareAtPriceCents,
+          imageUrl: remoteProduct.imageUrl,
+          gallery: remoteProduct.gallery,
+          inventory: remoteProduct.inventory,
+          sizes: remoteProduct.sizes,
+          inventoryBySize: remoteProduct.inventoryBySize,
+          createdAt: remoteProduct.createdAt ?? cachedProduct.createdAt,
+          updatedAt: remoteProduct.updatedAt ?? cachedProduct.updatedAt,
+          approvalStatus: remoteProduct.approvalStatus ?? "pending",
+          publishStatus: remoteProduct.publishStatus ?? "unpublished",
+        }, seller.id, cachedProduct.id);
+      } else if (mode === "create") {
         const newProduct = createSellerProductFromData(formData, seller.id, seller.storeName);
         saveSellerProduct(newProduct, seller.id);
       } else if (mode === "edit" && existingProduct) {
@@ -282,14 +361,15 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
                     <input
                       type="checkbox"
                       checked={formData.sizes.includes(size)}
-                      onChange={(event) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          sizes: event.target.checked
-                            ? [...prev.sizes, size]
-                            : prev.sizes.filter((item) => item !== size),
-                        }))
-                      }
+                      onChange={(event) => setFormData((prev) => {
+                        const sizes = event.target.checked
+                          ? [...prev.sizes, size]
+                          : prev.sizes.filter((item) => item !== size);
+                        const inventoryBySize = { ...(prev.inventoryBySize || {}) };
+                        if (!event.target.checked) delete inventoryBySize[size];
+                        const inventory = sizes.reduce((total, selectedSize) => total + (inventoryBySize[selectedSize] ?? 0), 0);
+                        return { ...prev, sizes, inventoryBySize, inventory };
+                      })}
                     />
                     {size}
                   </label>

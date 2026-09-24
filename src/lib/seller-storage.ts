@@ -120,10 +120,10 @@ export function generateSlug(name: string): string {
     .replace(/^-|-$/g, "");
 }
 
-export function saveSellerProduct(product: SellerProduct, expectedSellerId?: string): boolean {
+export function saveSellerProduct(product: SellerProduct, expectedSellerId?: string, replaceProductId?: string): boolean {
   if (expectedSellerId && product.sellerId !== expectedSellerId) return false;
   const products = getStoredSellerProducts();
-  const existingIndex = products.findIndex((p) => p.id === product.id);
+  const existingIndex = products.findIndex((p) => p.id === (replaceProductId ?? product.id));
   
   if (existingIndex >= 0) {
     if (expectedSellerId && products[existingIndex].sellerId !== expectedSellerId) return false;
@@ -170,6 +170,9 @@ export function createSellerProductFromData(
   
   const imageUrl = data.imageUrl || `https://picsum.photos/seed/${slug}/1200/900`;
   const gallery = [`https://picsum.photos/seed/${slug}-gallery/1200/900`];
+  const inventory = data.sizes.length > 0
+    ? data.sizes.reduce((total, size) => total + Math.max(0, Math.floor(data.inventoryBySize?.[size] ?? 0)), 0)
+    : Math.max(0, Math.floor(data.inventory));
   
   return {
     id,
@@ -184,12 +187,13 @@ export function createSellerProductFromData(
     imageUrl,
     gallery,
     category: data.category,
-    inventory: data.inventory,
+    inventory,
     createdAt: now,
     updatedAt: now,
     approvalStatus: "pending",
     publishStatus: "unpublished",
     sizes: data.sizes,
+    inventoryBySize: data.inventoryBySize,
   };
 }
 
@@ -198,6 +202,9 @@ export function updateSellerProductFromData(
   data: ProductFormData
 ): SellerProduct {
   const now = new Date().toISOString();
+  const inventory = data.sizes.length > 0
+    ? data.sizes.reduce((total, size) => total + Math.max(0, Math.floor(data.inventoryBySize?.[size] ?? 0)), 0)
+    : Math.max(0, Math.floor(data.inventory));
   
   return {
     ...existingProduct,
@@ -207,9 +214,10 @@ export function updateSellerProductFromData(
     priceCents: data.priceCents,
     compareAtPriceCents: data.compareAtPriceCents,
     category: data.category,
-    inventory: data.inventory,
+    inventory,
     imageUrl: data.imageUrl || existingProduct.imageUrl,
     sizes: data.sizes,
+    inventoryBySize: data.inventoryBySize,
     updatedAt: now,
   };
 }
