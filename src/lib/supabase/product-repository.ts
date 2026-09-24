@@ -475,7 +475,13 @@ async function syncProductVariants(productId: string, input: ProductFormData) {
   if (error) throw error;
 }
 
-export async function createSellerProductInSupabase(input: ProductFormData, sellerId: string, requestSlug?: string) {
+export async function createSellerProductInSupabase(
+  input: ProductFormData,
+  sellerId: string,
+  requestSlug?: string,
+  approvalStatus: Product["approvalStatus"] = "pending",
+  publishStatus: Product["publishStatus"] = "unpublished",
+) {
   const supabase = createClient();
   const categoryId = await categoryIdForSlug(input.category);
   const slug = requestSlug ?? `${input.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Date.now()}`;
@@ -488,10 +494,10 @@ export async function createSellerProductInSupabase(input: ProductFormData, sell
     .maybeSingle();
   if (existingError) throw existingError;
   if (existingData) {
-    return updateSellerProductInSupabase((existingData as unknown as ProductRow).id, input, sellerId);
+    return updateSellerProductInSupabase((existingData as unknown as ProductRow).id, input, sellerId, approvalStatus, publishStatus);
   }
 
-  const row = productWrite(input, sellerId, slug, "pending", "unpublished");
+  const row = productWrite(input, sellerId, slug, approvalStatus, publishStatus);
   row.category_id = categoryId;
 
   const { data, error } = await supabase.from("products").insert(row).select(PRODUCT_SELECT).single();
@@ -520,10 +526,16 @@ export async function createAdminProductInSupabase(input: ProductFormData) {
   return toProduct(product);
 }
 
-export async function updateSellerProductInSupabase(productId: string, input: ProductFormData, sellerId: string) {
+export async function updateSellerProductInSupabase(
+  productId: string,
+  input: ProductFormData,
+  sellerId: string,
+  approvalStatus: Product["approvalStatus"] = "pending",
+  publishStatus: Product["publishStatus"] = "unpublished",
+) {
   const supabase = createClient();
   const categoryId = await categoryIdForSlug(input.category);
-  const row = productWrite(input, sellerId, `${input.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${productId.slice(0, 8)}`, "pending", "unpublished");
+  const row = productWrite(input, sellerId, `${input.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${productId.slice(0, 8)}`, approvalStatus, publishStatus);
   row.category_id = categoryId;
   const { data, error } = await supabase
     .from("products")
