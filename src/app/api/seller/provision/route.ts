@@ -4,6 +4,7 @@ import { getSupabaseAdminClient, getSupabaseServerClient } from "@/lib/supabase/
 type ProvisionRequest = {
   storeName?: string;
   bio?: string;
+  role?: "seller";
 };
 
 function supabaseError(error: { code?: string; message?: string; details?: string; hint?: string }) {
@@ -27,6 +28,11 @@ export async function POST(request: Request) {
   }
 
   const admin = await getSupabaseAdminClient();
+  const body = (await request.json().catch(() => ({}))) as ProvisionRequest;
+  if (body.role !== "seller" || authData.user.user_metadata?.role !== "seller") {
+    return NextResponse.json({ error: { message: "A seller-authenticated provisioning request is required" } }, { status: 403 });
+  }
+
   const { data: existingProfile, error: profileLookupError } = await admin
     .from("profiles")
     .select("role")
@@ -37,8 +43,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: supabaseError(profileLookupError) }, { status: 500 });
   }
 
-  if (existingProfile?.role !== "seller" && authData.user.user_metadata?.role !== "seller") {
-    return NextResponse.json({ error: { message: "Seller role is required" } }, { status: 403 });
+  const storeName = body.storeName?.trim() ?? "";
+  const bio = body.bio?.trim() ?? "";
+
+  const { error: profileError } = await admin.from("profiles").upsert({
+    id: authData.user.id,
+    email: authData.user.email,
+    full_name: authData.user.user_metadata?.full_name ?? storeName,
+    role: "seller",
+    updated_at: new Date().toISOString(),
+  });
+
+  if (profileError) {
+    return NextResponse.json({ error: supabaseError(profileError) }, { status: 500 });
   }
 
   const { data: existingSeller, error: sellerLookupError } = await admin
@@ -55,24 +72,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ sellerId: existingSeller.id });
   }
 
-  const body = (await request.json().catch(() => ({}))) as ProvisionRequest;
-  const storeName = body.storeName?.trim() ?? "";
-  const bio = body.bio?.trim() ?? "";
-
   if (!storeName || !bio) {
     return NextResponse.json({ error: { message: "Store name and bio are required" } }, { status: 400 });
-  }
-
-  const { error: profileError } = await admin.from("profiles").upsert({
-    id: authData.user.id,
-    email: authData.user.email,
-    full_name: authData.user.user_metadata?.full_name ?? storeName,
-    role: "seller",
-    updated_at: new Date().toISOString(),
-  });
-
-  if (profileError) {
-    return NextResponse.json({ error: supabaseError(profileError) }, { status: 500 });
   }
 
   const { data: seller, error: sellerError } = await admin

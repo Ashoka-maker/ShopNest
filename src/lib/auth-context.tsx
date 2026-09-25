@@ -163,15 +163,19 @@ function convertSupabaseUser(supabaseUser: SupabaseAuthUser | null | undefined):
 
 const SUPABASE_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-async function ensureAuthenticatedIdentity(supabaseUser: SupabaseAuthUser, user: User) {
+async function ensureAuthenticatedIdentity(supabaseUser: SupabaseAuthUser, user: User): Promise<User> {
   if (!SUPABASE_UUID_PATTERN.test(supabaseUser.id)) {
     throw new Error("Supabase authentication returned an invalid user ID");
   }
 
-  if (user.role === "seller") {
+  if (user.role === "seller" || supabaseUser.user_metadata?.role === "seller") {
     const seller = getSellerByUserId(supabaseUser.id);
     await provisionSeller(seller?.storeName ?? "", seller?.bio ?? "");
-    return;
+    const refreshedUser = await getClientUser();
+    if (!refreshedUser || refreshedUser.profile?.role !== "seller") {
+      throw new Error("Supabase seller profile was not provisioned with seller role");
+    }
+    return convertSupabaseUser(refreshedUser);
   }
 
   if (user.role === "customer") {
@@ -181,6 +185,8 @@ async function ensureAuthenticatedIdentity(supabaseUser: SupabaseAuthUser, user:
       role: "customer",
     });
   }
+
+  return user;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -205,8 +211,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const supabaseUser = await getClientUser();
           if (supabaseUser) {
             const convertedUser = convertSupabaseUser(supabaseUser);
-            await ensureAuthenticatedIdentity(supabaseUser, convertedUser);
-            setUser(convertedUser);
+            const authenticatedUser = await ensureAuthenticatedIdentity(supabaseUser, convertedUser);
+            setUser(authenticatedUser);
             setIsEmailVerified(supabaseUser.email_confirmed_at !== null);
           }
         } catch (error) {
@@ -245,11 +251,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (result.success && result.user) {
           const hydratedUser = await getClientUser();
           const convertedUser = convertSupabaseUser(hydratedUser ?? result.user);
-          await ensureAuthenticatedIdentity(hydratedUser ?? result.user, convertedUser);
-          setUser(convertedUser);
+          const authenticatedUser = await ensureAuthenticatedIdentity(hydratedUser ?? result.user, convertedUser);
+          setUser(authenticatedUser);
           setIsEmailVerified((hydratedUser ?? result.user).email_confirmed_at !== null);
           setIsLoading(false);
-          return { success: true, role: convertedUser.role };
+          return { success: true, role: authenticatedUser.role };
         }
 
         setIsLoading(false);
@@ -357,7 +363,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (result.success && result.user) {
           const hydratedUser = await getClientUser();
           const convertedUser = convertSupabaseUser(hydratedUser ?? result.user);
-          setUser(convertedUser);
+          const sellerUser = role === "seller" ? { ...convertedUser, role: "seller" as const } : convertedUser;
+          setUser(sellerUser);
           setIsEmailVerified((hydratedUser ?? result.user).email_confirmed_at !== null);
           setIsLoading(false);
 
@@ -378,7 +385,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           if (role !== "seller") {
-            await ensureAuthenticatedIdentity(hydratedUser ?? result.user, convertedUser);
+            const authenticatedUser = await ensureAuthenticatedIdentity(hydratedUser ?? result.user, convertedUser);
+            setUser(authenticatedUser);
           }
 
           return { success: true, userId: result.user.id, role: convertedUser.role };

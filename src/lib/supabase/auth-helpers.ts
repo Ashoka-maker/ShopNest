@@ -47,7 +47,7 @@ export async function provisionSeller(storeName: string, bio: string): Promise<s
   const response = await fetch("/api/seller/provision", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ storeName, bio }),
+    body: JSON.stringify({ storeName, bio, role: "seller" }),
   });
   const result = await response.json().catch(() => null) as { sellerId?: string; error?: { message?: string } } | null;
 
