@@ -34,6 +34,30 @@ export async function upsertProfile(userId: string, data: {
   return !error;
 }
 
+export async function ensureProfile(userId: string, data: {
+  email?: string;
+  full_name?: string;
+  role?: UserRole;
+}) {
+  const updated = await upsertProfile(userId, data);
+  if (!updated) throw new Error("Unable to provision the Supabase profile");
+}
+
+export async function provisionSeller(storeName: string, bio: string): Promise<string> {
+  const response = await fetch("/api/seller/provision", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ storeName, bio }),
+  });
+  const result = await response.json().catch(() => null) as { sellerId?: string; error?: { message?: string } } | null;
+
+  if (!response.ok || !result?.sellerId) {
+    throw new Error(result?.error?.message ?? `Seller provisioning failed with status ${response.status}`);
+  }
+
+  return result.sellerId;
+}
+
 /**
  * Client-side: Get current user
  */
@@ -87,24 +111,6 @@ export async function signUpClient(email: string, password: string, name: string
 
   if (error) {
     return { success: false, error: error.message };
-  }
-
-  // Create profile only when the table is writable. Phase 2 keeps auth metadata as the source of truth
-  // until Phase 3 adds the proper RLS policies and database authorization.
-  if (data.user) {
-    try {
-      const profileError = !(await upsertProfile(data.user.id, {
-        email: data.user.email,
-        full_name: name,
-        role: safeRole,
-      }, false));
-
-      if (profileError) {
-        console.warn("Supabase profile creation is not yet available; continuing with Auth metadata only.");
-      }
-    } catch (error) {
-      console.warn("Supabase profile creation skipped during Phase 2 auth setup:", error);
-    }
   }
 
   return {

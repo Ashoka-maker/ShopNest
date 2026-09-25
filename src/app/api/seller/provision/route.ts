@@ -41,6 +41,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: { message: "Seller role is required" } }, { status: 403 });
   }
 
+  const { data: existingSeller, error: sellerLookupError } = await admin
+    .from("sellers")
+    .select("id")
+    .eq("user_id", authData.user.id)
+    .maybeSingle();
+
+  if (sellerLookupError) {
+    return NextResponse.json({ error: supabaseError(sellerLookupError) }, { status: 500 });
+  }
+
+  if (existingSeller) {
+    return NextResponse.json({ sellerId: existingSeller.id });
+  }
+
   const body = (await request.json().catch(() => ({}))) as ProvisionRequest;
   const storeName = body.storeName?.trim() ?? "";
   const bio = body.bio?.trim() ?? "";
@@ -59,20 +73,6 @@ export async function POST(request: Request) {
 
   if (profileError) {
     return NextResponse.json({ error: supabaseError(profileError) }, { status: 500 });
-  }
-
-  const { data: existingSeller, error: sellerLookupError } = await admin
-    .from("sellers")
-    .select("id")
-    .eq("user_id", authData.user.id)
-    .maybeSingle();
-
-  if (sellerLookupError) {
-    return NextResponse.json({ error: supabaseError(sellerLookupError) }, { status: 500 });
-  }
-
-  if (existingSeller) {
-    return NextResponse.json({ sellerId: existingSeller.id });
   }
 
   const { data: seller, error: sellerError } = await admin

@@ -6,6 +6,8 @@ import { getSellerByUserId } from "@/lib/seller-storage";
 import { validateAdminCredentials } from "@/lib/admin-storage";
 import { 
   getClientUser, 
+  ensureProfile,
+  provisionSeller,
   signUpClient, 
   signInClient, 
   signOutClient, 
@@ -159,6 +161,28 @@ function convertSupabaseUser(supabaseUser: SupabaseAuthUser | null | undefined):
   };
 }
 
+const SUPABASE_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function ensureAuthenticatedIdentity(supabaseUser: SupabaseAuthUser, user: User) {
+  if (!SUPABASE_UUID_PATTERN.test(supabaseUser.id)) {
+    throw new Error("Supabase authentication returned an invalid user ID");
+  }
+
+  if (user.role === "seller") {
+    const seller = getSellerByUserId(supabaseUser.id);
+    await provisionSeller(seller?.storeName ?? "", seller?.bio ?? "");
+    return;
+  }
+
+  if (user.role === "customer") {
+    await ensureProfile(supabaseUser.id, {
+      email: supabaseUser.email ?? undefined,
+      full_name: supabaseUser.user_metadata?.full_name ?? user.name,
+      role: "customer",
+    });
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -175,29 +199,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadUser = async () => {
       setIsLoading(true);
-      
+
       if (useSupabaseAuth) {
-        // Try Supabase auth first
         try {
           const supabaseUser = await getClientUser();
           if (supabaseUser) {
             const convertedUser = convertSupabaseUser(supabaseUser);
+            await ensureAuthenticatedIdentity(supabaseUser, convertedUser);
             setUser(convertedUser);
             setIsEmailVerified(supabaseUser.email_confirmed_at !== null);
           }
         } catch (error) {
-          console.error("Supabase auth error, falling back to localStorage:", error);
-          // Fallback to localStorage
-          const currentUser = getCurrentUser();
-          const adminSession = getAdminSession();
-          if (adminSession) {
-            setUser(adminSession);
-          } else if (currentUser) {
-            setUser(currentUser);
-          }
+          console.error("Supabase authentication initialization failed:", error);
+          setUser(null);
         }
       } else {
-        // Use localStorage auth
         const currentUser = getCurrentUser();
         const adminSession = getAdminSession();
         if (adminSession) {
@@ -206,11 +222,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(currentUser);
         }
       }
-      
+
       setIsLoading(false);
     };
 
-    loadUser();
+    void loadUser();
   }, [useSupabaseAuth]);
 
   const isSeller = user?.role === "seller";
@@ -229,6 +245,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (result.success && result.user) {
           const hydratedUser = await getClientUser();
           const convertedUser = convertSupabaseUser(hydratedUser ?? result.user);
+          await ensureAuthenticatedIdentity(hydratedUser ?? result.user, convertedUser);
           setUser(convertedUser);
           setIsEmailVerified((hydratedUser ?? result.user).email_confirmed_at !== null);
           setIsLoading(false);
@@ -238,26 +255,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
         return { success: false, error: result.error || "Invalid email or password" };
       } catch (error) {
-        console.error("Supabase sign in error, falling back to localStorage:", error);
-        // Fallback to localStorage
-        const users = getStoredUsers();
-        const foundUser = users.find((u) => u.email === email && u.password === password);
-
-        if (foundUser?.role === "seller") {
-          setIsLoading(false);
-          return { success: false, error: "Seller accounts must sign in through Supabase." };
-        }
-        
-        if (foundUser) {
-          const { password: _, ...userWithoutPassword } = foundUser;
-          setUser(userWithoutPassword);
-          saveCurrentUser(userWithoutPassword);
-          setIsLoading(false);
-          return { success: true, role: userWithoutPassword.role };
-        }
-        
+        console.error("Supabase sign in failed:", error);
         setIsLoading(false);
-        return { success: false, error: "Invalid email or password" };
+        return { success: false, error: error instanceof Error ? error.message : "Supabase authentication failed" };
       }
     }
     
@@ -301,23 +301,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
         return { success: false, error: result.error || "Invalid admin credentials" };
       } catch (error) {
-        console.error("Supabase admin sign in error, falling back to localStorage:", error);
-        // Fallback to localStorage
-        if (validateAdminCredentials(email, password)) {
-          const adminUser: User = {
-            id: "admin-001",
-            name: "Admin",
-            email: email,
-            role: "admin",
-          };
-          setUser(adminUser);
-          saveAdminSession(adminUser);
-          setIsLoading(false);
-          return { success: true };
-        }
-        
+        console.error("Supabase admin sign in failed:", error);
         setIsLoading(false);
-        return { success: false, error: "Invalid admin credentials" };
+        return { success: false, error: error instanceof Error ? error.message : "Supabase authentication failed" };
       }
     }
     
@@ -390,44 +376,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             };
           }
 
+          if (role !== "seller") {
+            await ensureAuthenticatedIdentity(hydratedUser ?? result.user, convertedUser);
+          }
+
           return { success: true, userId: result.user.id, role: convertedUser.role };
         }
 
         setIsLoading(false);
         return { success: false, error: result.error || "Unable to create account" };
       } catch (error) {
-        console.error("Supabase sign up error, falling back to localStorage:", error);
-        if (role === "seller") {
-          setIsLoading(false);
-          return { success: false, error: "Seller accounts must be created through Supabase." };
-        }
-        // Fallback to localStorage
-        const users = getStoredUsers();
-        const existingUser = users.find((u) => u.email === email);
-        
-        if (existingUser) {
-          setIsLoading(false);
-          return { success: false, error: "An account with this email already exists" };
-        }
-        
-        const userId = "user-" + Date.now();
-        const newUser: StoredUser = {
-          id: userId,
-          name: name.trim(),
-          email: email.toLowerCase().trim(),
-          password: password,
-          role: role,
-        };
-        
-        users.push(newUser);
-        saveStoredUsers(users);
-        
-        const { password: _, ...userWithoutPassword } = newUser;
-        setUser(userWithoutPassword);
-        saveCurrentUser(userWithoutPassword);
-        
+        console.error("Supabase sign up failed:", error);
         setIsLoading(false);
-        return { success: true, userId, role: userWithoutPassword.role };
+        return { success: false, error: error instanceof Error ? error.message : "Supabase account creation failed" };
       }
     }
     
@@ -508,21 +469,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser({ ...user, name: trimmedName, email: normalizedEmail });
         return { success: true };
       } catch (error) {
-        console.error("Supabase profile update error, falling back to localStorage:", error);
-        // Fallback to localStorage
-        const users = getStoredUsers();
-        const duplicate = users.find((storedUser) => storedUser.email === normalizedEmail && storedUser.id !== user.id);
-        if (duplicate) return { success: false, error: "An account with this email already exists." };
-        const index = users.findIndex((storedUser) => storedUser.id === user.id);
-        if (index < 0) return { success: false, error: "Account could not be found." };
-
-        const updatedUser = { ...users[index], name: trimmedName, email: normalizedEmail };
-        users[index] = updatedUser;
-        saveStoredUsers(users);
-        const sessionUser: User = { id: updatedUser.id, name: updatedUser.name, email: updatedUser.email, role: updatedUser.role };
-        setUser(sessionUser);
-        saveCurrentUser(sessionUser);
-        return { success: true };
+        console.error("Supabase profile update failed:", error);
+        return { success: false, error: error instanceof Error ? error.message : "Supabase profile update failed" };
       }
     }
 
@@ -556,16 +504,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return { success: true };
       } catch (error) {
-        console.error("Supabase password change error, falling back to localStorage:", error);
-        // Fallback to localStorage
-        const users = getStoredUsers();
-        const index = users.findIndex((storedUser) => storedUser.id === user.id);
-        if (index < 0) return { success: false, error: "Account could not be found." };
-        
-        // For localStorage, we can't verify current password securely, so we just update
-        users[index] = { ...users[index], password: newPassword };
-        saveStoredUsers(users);
-        return { success: true };
+        console.error("Supabase password change failed:", error);
+        return { success: false, error: error instanceof Error ? error.message : "Supabase password change failed" };
       }
     }
 
