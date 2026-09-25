@@ -4,6 +4,15 @@ import { createContext, useContext, useState, ReactNode, useEffect } from "react
 import type { UserRole } from "@/types/user";
 import { getSellerByUserId } from "@/lib/seller-storage";
 import { validateAdminCredentials } from "@/lib/admin-storage";
+import { 
+  getClientUser, 
+  signUpClient, 
+  signInClient, 
+  signOutClient, 
+  resetPasswordClient,
+  updatePasswordClient 
+} from "@/lib/supabase/auth-helpers";
+import { getDataSourceMode } from "@/lib/adapters/config";
 
 export type User = {
   id: string;
@@ -34,7 +43,10 @@ type AuthContextType = {
   signOut: () => void;
   updateProfile: (name: string, email: string) => Promise<{ success: boolean; error?: string }>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  updatePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
   isLoading: boolean;
+  isEmailVerified: boolean;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,7 +55,7 @@ const USERS_STORAGE_KEY = "shopnest_users";
 const CURRENT_USER_KEY = "shopnest_current_user";
 const ADMIN_SESSION_KEY = "shopnest_admin_session";
 
-// Helper functions for localStorage
+// Helper functions for localStorage (fallback)
 const getStoredUsers = (): StoredUser[] => {
   if (typeof window === "undefined") return [];
   try {
@@ -109,20 +121,97 @@ const saveAdminSession = (user: User | null) => {
   }
 };
 
+type SupabaseAuthUser = {
+  id: string;
+  email?: string | null;
+  email_confirmed_at?: string | null;
+  user_metadata?: {
+    full_name?: string;
+    role?: string;
+  };
+  profile?: {
+    role?: string;
+    full_name?: string;
+    email?: string | null;
+  };
+  role?: string;
+};
+
+// Convert Supabase user to our User type
+function convertSupabaseUser(supabaseUser: SupabaseAuthUser | null | undefined): User {
+  if (!supabaseUser) {
+    return {
+      id: "",
+      name: "User",
+      email: "",
+      role: "customer",
+    };
+  }
+
+  const profileRole = supabaseUser.profile?.role ?? supabaseUser.role ?? supabaseUser.user_metadata?.role ?? "customer";
+  const safeRole = profileRole === "seller" || profileRole === "admin" ? profileRole : "customer";
+
+  return {
+    id: supabaseUser.id,
+    name: supabaseUser.user_metadata?.full_name || supabaseUser.profile?.full_name || supabaseUser.email?.split("@")[0] || "User",
+    email: supabaseUser.email || supabaseUser.profile?.email || "",
+    role: safeRole as User["role"],
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [useSupabaseAuth, setUseSupabaseAuth] = useState(false);
+
+  // Check if we should use Supabase auth
+  useEffect(() => {
+    const mode = getDataSourceMode();
+    setUseSupabaseAuth(mode === "supabase" || mode === "hybrid");
+  }, []);
 
   // Load current user on mount
   useEffect(() => {
-    const currentUser = getCurrentUser();
-    const adminSession = getAdminSession();
-    if (adminSession) {
-      setUser(adminSession);
-    } else if (currentUser) {
-      setUser(currentUser);
-    }
-  }, []);
+    const loadUser = async () => {
+      setIsLoading(true);
+      
+      if (useSupabaseAuth) {
+        // Try Supabase auth first
+        try {
+          const supabaseUser = await getClientUser();
+          if (supabaseUser) {
+            const convertedUser = convertSupabaseUser(supabaseUser);
+            setUser(convertedUser);
+            setIsEmailVerified(supabaseUser.email_confirmed_at !== null);
+          }
+        } catch (error) {
+          console.error("Supabase auth error, falling back to localStorage:", error);
+          // Fallback to localStorage
+          const currentUser = getCurrentUser();
+          const adminSession = getAdminSession();
+          if (adminSession) {
+            setUser(adminSession);
+          } else if (currentUser) {
+            setUser(currentUser);
+          }
+        }
+      } else {
+        // Use localStorage auth
+        const currentUser = getCurrentUser();
+        const adminSession = getAdminSession();
+        if (adminSession) {
+          setUser(adminSession);
+        } else if (currentUser) {
+          setUser(currentUser);
+        }
+      }
+      
+      setIsLoading(false);
+    };
+
+    loadUser();
+  }, [useSupabaseAuth]);
 
   const isSeller = user?.role === "seller";
   const isAdmin = user?.role === "admin";
@@ -133,9 +222,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ): Promise<{ success: boolean; error?: string; role?: UserRole }> => {
     setIsLoading(true);
     
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (useSupabaseAuth) {
+      try {
+        const result = await signInClient(email, password);
+
+        if (result.success && result.user) {
+          const hydratedUser = await getClientUser();
+          const convertedUser = convertSupabaseUser(hydratedUser ?? result.user);
+          setUser(convertedUser);
+          setIsEmailVerified((hydratedUser ?? result.user).email_confirmed_at !== null);
+          setIsLoading(false);
+          return { success: true, role: convertedUser.role };
+        }
+
+        setIsLoading(false);
+        return { success: false, error: result.error || "Invalid email or password" };
+      } catch (error) {
+        console.error("Supabase sign in error, falling back to localStorage:", error);
+        // Fallback to localStorage
+        const users = getStoredUsers();
+        const foundUser = users.find((u) => u.email === email && u.password === password);
+
+        if (foundUser?.role === "seller") {
+          setIsLoading(false);
+          return { success: false, error: "Seller accounts must sign in through Supabase." };
+        }
+        
+        if (foundUser) {
+          const { password: _, ...userWithoutPassword } = foundUser;
+          setUser(userWithoutPassword);
+          saveCurrentUser(userWithoutPassword);
+          setIsLoading(false);
+          return { success: true, role: userWithoutPassword.role };
+        }
+        
+        setIsLoading(false);
+        return { success: false, error: "Invalid email or password" };
+      }
+    }
     
+    // LocalStorage auth
     const users = getStoredUsers();
     const foundUser = users.find((u) => u.email === email && u.password === password);
     
@@ -154,9 +280,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const adminSignIn = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
     
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (useSupabaseAuth) {
+      try {
+        const result = await signInClient(email, password);
+
+        if (result.success && result.user) {
+          const hydratedUser = await getClientUser();
+          const convertedUser = convertSupabaseUser(hydratedUser ?? result.user);
+
+          if (convertedUser.role === "admin") {
+            setUser(convertedUser);
+            setIsLoading(false);
+            return { success: true };
+          }
+
+          setIsLoading(false);
+          return { success: false, error: "Access denied. Admin role required." };
+        }
+
+        setIsLoading(false);
+        return { success: false, error: result.error || "Invalid admin credentials" };
+      } catch (error) {
+        console.error("Supabase admin sign in error, falling back to localStorage:", error);
+        // Fallback to localStorage
+        if (validateAdminCredentials(email, password)) {
+          const adminUser: User = {
+            id: "admin-001",
+            name: "Admin",
+            email: email,
+            role: "admin",
+          };
+          setUser(adminUser);
+          saveAdminSession(adminUser);
+          setIsLoading(false);
+          return { success: true };
+        }
+        
+        setIsLoading(false);
+        return { success: false, error: "Invalid admin credentials" };
+      }
+    }
     
+    // LocalStorage auth
     if (validateAdminCredentials(email, password)) {
       const adminUser: User = {
         id: "admin-001",
@@ -182,9 +347,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ): Promise<{ success: boolean; error?: string; userId?: string; role?: UserRole }> => {
     setIsLoading(true);
     
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    
     // Validate input
     if (!name || name.trim().length === 0) {
       setIsLoading(false);
@@ -201,7 +363,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: "Password must be at least 6 characters" };
     }
     
-    // Check if user already exists
+    if (useSupabaseAuth) {
+      try {
+        const result = await signUpClient(email, password, name, role);
+
+        if (result.success && result.user) {
+          const hydratedUser = await getClientUser();
+          const convertedUser = convertSupabaseUser(hydratedUser ?? result.user);
+          setUser(convertedUser);
+          setIsEmailVerified((hydratedUser ?? result.user).email_confirmed_at !== null);
+          setIsLoading(false);
+
+          if (result.needsEmailVerification) {
+            if (role === "seller") {
+              return {
+                success: false,
+                error: "Seller account created. Verify your email, then sign in through Supabase to continue.",
+              };
+            }
+
+            return {
+              success: true,
+              userId: result.user.id,
+              role: convertedUser.role,
+              error: "Please check your email to verify your account before signing in.",
+            };
+          }
+
+          return { success: true, userId: result.user.id, role: convertedUser.role };
+        }
+
+        setIsLoading(false);
+        return { success: false, error: result.error || "Unable to create account" };
+      } catch (error) {
+        console.error("Supabase sign up error, falling back to localStorage:", error);
+        if (role === "seller") {
+          setIsLoading(false);
+          return { success: false, error: "Seller accounts must be created through Supabase." };
+        }
+        // Fallback to localStorage
+        const users = getStoredUsers();
+        const existingUser = users.find((u) => u.email === email);
+        
+        if (existingUser) {
+          setIsLoading(false);
+          return { success: false, error: "An account with this email already exists" };
+        }
+        
+        const userId = "user-" + Date.now();
+        const newUser: StoredUser = {
+          id: userId,
+          name: name.trim(),
+          email: email.toLowerCase().trim(),
+          password: password,
+          role: role,
+        };
+        
+        users.push(newUser);
+        saveStoredUsers(users);
+        
+        const { password: _, ...userWithoutPassword } = newUser;
+        setUser(userWithoutPassword);
+        saveCurrentUser(userWithoutPassword);
+        
+        setIsLoading(false);
+        return { success: true, userId, role: userWithoutPassword.role };
+      }
+    }
+    
+    // LocalStorage auth
     const users = getStoredUsers();
     const existingUser = users.find((u) => u.email === email);
     
@@ -210,7 +440,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: "An account with this email already exists" };
     }
     
-    // Create new user
     const userId = "user-" + Date.now();
     const newUser: StoredUser = {
       id: userId,
@@ -220,11 +449,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: role,
     };
     
-    // Save to storage
     users.push(newUser);
     saveStoredUsers(users);
     
-    // Set as current user
     const { password: _, ...userWithoutPassword } = newUser;
     setUser(userWithoutPassword);
     saveCurrentUser(userWithoutPassword);
@@ -233,10 +460,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { success: true, userId, role: userWithoutPassword.role };
   };
 
-  const signOut = () => {
+  const signOut = async () => {
+    if (useSupabaseAuth) {
+      try {
+        await signOutClient();
+      } catch (error) {
+        console.error("Supabase sign out error:", error);
+      }
+    }
+    
     setUser(null);
     saveCurrentUser(null);
     saveAdminSession(null);
+    setIsEmailVerified(false);
   };
 
   const updateProfile = async (name: string, email: string) => {
@@ -246,6 +482,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!trimmedName) return { success: false, error: "Name is required." };
     if (!normalizedEmail.includes("@")) return { success: false, error: "Enter a valid email address." };
 
+    if (useSupabaseAuth) {
+      try {
+        const supabase = (await import("@/lib/supabase/client")).createClient();
+        const { error } = await supabase.auth.updateUser({
+          email: normalizedEmail,
+          data: { full_name: trimmedName },
+        });
+
+        if (error) {
+          return { success: false, error: error.message };
+        }
+
+        // Update profile in database
+        const { upsertProfile } = await import("@/lib/supabase/auth-helpers");
+        const profileUpdated = await upsertProfile(user.id, {
+          email: normalizedEmail,
+          full_name: trimmedName,
+        }, false);
+
+        if (!profileUpdated) {
+          return { success: false, error: "Failed to update profile" };
+        }
+
+        setUser({ ...user, name: trimmedName, email: normalizedEmail });
+        return { success: true };
+      } catch (error) {
+        console.error("Supabase profile update error, falling back to localStorage:", error);
+        // Fallback to localStorage
+        const users = getStoredUsers();
+        const duplicate = users.find((storedUser) => storedUser.email === normalizedEmail && storedUser.id !== user.id);
+        if (duplicate) return { success: false, error: "An account with this email already exists." };
+        const index = users.findIndex((storedUser) => storedUser.id === user.id);
+        if (index < 0) return { success: false, error: "Account could not be found." };
+
+        const updatedUser = { ...users[index], name: trimmedName, email: normalizedEmail };
+        users[index] = updatedUser;
+        saveStoredUsers(users);
+        const sessionUser: User = { id: updatedUser.id, name: updatedUser.name, email: updatedUser.email, role: updatedUser.role };
+        setUser(sessionUser);
+        saveCurrentUser(sessionUser);
+        return { success: true };
+      }
+    }
+
+    // LocalStorage auth
     const users = getStoredUsers();
     const duplicate = users.find((storedUser) => storedUser.email === normalizedEmail && storedUser.id !== user.id);
     if (duplicate) return { success: false, error: "An account with this email already exists." };
@@ -264,12 +545,73 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const changePassword = async (currentPassword: string, newPassword: string) => {
     if (!user || user.role !== "customer") return { success: false, error: "Only customer passwords can be changed here." };
     if (newPassword.length < 6) return { success: false, error: "New password must be at least 6 characters." };
+
+    if (useSupabaseAuth) {
+      try {
+        const result = await updatePasswordClient(newPassword);
+        
+        if (!result.success) {
+          return { success: false, error: result.error || "Failed to update password" };
+        }
+
+        return { success: true };
+      } catch (error) {
+        console.error("Supabase password change error, falling back to localStorage:", error);
+        // Fallback to localStorage
+        const users = getStoredUsers();
+        const index = users.findIndex((storedUser) => storedUser.id === user.id);
+        if (index < 0) return { success: false, error: "Account could not be found." };
+        
+        // For localStorage, we can't verify current password securely, so we just update
+        users[index] = { ...users[index], password: newPassword };
+        saveStoredUsers(users);
+        return { success: true };
+      }
+    }
+
+    // LocalStorage auth
     const users = getStoredUsers();
     const index = users.findIndex((storedUser) => storedUser.id === user.id);
     if (index < 0 || users[index].password !== currentPassword) return { success: false, error: "Current password is incorrect." };
     users[index] = { ...users[index], password: newPassword };
     saveStoredUsers(users);
     return { success: true };
+  };
+
+  const updatePassword = async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
+    if (!newPassword || newPassword.length < 6) {
+      return { success: false, error: "New password must be at least 6 characters." };
+    }
+
+    if (useSupabaseAuth) {
+      try {
+        const result = await updatePasswordClient(newPassword);
+        return result;
+      } catch (error) {
+        console.error("Supabase password update error:", error);
+        return { success: false, error: "Password update is only available with Supabase authentication" };
+      }
+    }
+
+    return { success: false, error: "Password update is only available with Supabase authentication" };
+  };
+
+  const resetPassword = async (email: string): Promise<{ success: boolean; error?: string }> => {
+    if (!email || !email.includes("@")) {
+      return { success: false, error: "Valid email is required" };
+    }
+
+    if (useSupabaseAuth) {
+      try {
+        const result = await resetPasswordClient(email);
+        return result;
+      } catch (error) {
+        console.error("Supabase password reset error:", error);
+        return { success: false, error: "Password reset is only available with Supabase authentication" };
+      }
+    }
+
+    return { success: false, error: "Password reset is only available with Supabase authentication" };
   };
 
   return (
@@ -284,7 +626,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signOut,
         updateProfile,
         changePassword,
+        updatePassword,
+        resetPassword,
         isLoading,
+        isEmailVerified,
       }}
     >
       {children}
