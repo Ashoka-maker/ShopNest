@@ -656,7 +656,7 @@ export function getRelatedProducts(product: Product, limit = 4) {
   );
 
   // Add seller products if we need more
-  if (related.length < limit) {
+  if (related.length < limit && getDataSourceMode() === "local") {
     const sellerProducts = getSellerProducts("");
     const sellerRelated = sellerProducts
       .filter(
@@ -674,13 +674,18 @@ export function getRelatedProducts(product: Product, limit = 4) {
 }
 
 export function getAllProducts(): Product[] {
-  const products = supabaseProducts ?? readCatalogState().products;
+  const useSupabase = getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid";
+  const products = useSupabase ? (supabaseProducts ?? []) : readCatalogState().products;
   return products.filter(
     (product) => product.approvalStatus === "approved" && product.publishStatus === "published",
   );
 }
 
 export async function loadSupabaseProducts(): Promise<Product[]> {
+  if (getDataSourceMode() !== "supabase" && getDataSourceMode() !== "hybrid") {
+    return getAllProducts();
+  }
+
   try {
     const products = await getPublicProducts();
     supabaseProducts = products;
@@ -689,8 +694,8 @@ export async function loadSupabaseProducts(): Promise<Product[]> {
     }
     return products;
   } catch (error) {
-    console.error("Supabase product read failed; retaining local catalog during migration:", error);
-    return getAllProducts();
+    console.error("Supabase product read failed:", error);
+    throw error;
   }
 }
 

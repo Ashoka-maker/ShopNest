@@ -39,6 +39,7 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
   const [supabaseProductId, setSupabaseProductId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageError, setImageError] = useState("");
+  const [persistenceError, setPersistenceError] = useState("");
   const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState<ProductFormData>({
     name: "",
@@ -83,7 +84,10 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
             setSupabaseProductId(remoteProduct?.id ?? null);
           }
         } catch (error) {
-          console.error("Unable to load Supabase seller mapping; retaining local product editing:", error);
+          console.error("Unable to load Supabase seller mapping:", error);
+          setPersistenceError(error instanceof Error ? error.message : "Unable to connect to Supabase.");
+          setLoading(false);
+          return;
         }
       }
 
@@ -161,15 +165,21 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setPersistenceError("");
 
     // Simulate processing delay
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
     try {
-      const useSupabase = (getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid") && supabaseSellerId;
-      if (useSupabase && mode === "create") {
+      const supabaseMode = getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid";
+      if (supabaseMode && !supabaseSellerId) {
+        throw new Error("Supabase seller identity is unavailable; product was not saved.");
+      }
+      const remoteSellerId = supabaseSellerId ?? "";
+
+      if (supabaseMode && mode === "create") {
         const cachedProduct = createSellerProductFromData(formData, seller.id, seller.storeName);
-        const remoteProduct = await createSellerProductInSupabase(formData, supabaseSellerId, cachedProduct.slug);
+        const remoteProduct = await createSellerProductInSupabase(formData, remoteSellerId, cachedProduct.slug);
         saveSellerProduct({
           ...cachedProduct,
           id: remoteProduct.id,
@@ -189,13 +199,13 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
           approvalStatus: remoteProduct.approvalStatus ?? "pending",
           publishStatus: remoteProduct.publishStatus ?? "unpublished",
         });
-      } else if (useSupabase && mode === "edit" && supabaseSellerId) {
+      } else if (supabaseMode && mode === "edit" && remoteSellerId) {
         const cachedProduct = existingProduct ?? createSellerProductFromData(formData, seller.id, seller.storeName);
         const remoteProduct = supabaseProductId
-          ? await updateSellerProductInSupabase(supabaseProductId, formData, supabaseSellerId)
+          ? await updateSellerProductInSupabase(supabaseProductId, formData, remoteSellerId)
           : await createSellerProductInSupabase(
             formData,
-            supabaseSellerId,
+            remoteSellerId,
             cachedProduct.slug,
             cachedProduct.approvalStatus,
             cachedProduct.publishStatus,
@@ -230,6 +240,7 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
       router.push("/seller/dashboard");
     } catch (error) {
       console.error("Error saving product:", error);
+      setPersistenceError(error instanceof Error ? error.message : "Unable to save product to Supabase.");
       setIsSubmitting(false);
     }
   };
@@ -250,6 +261,7 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
   return (
     <Container className="py-8 sm:py-12">
       <div className="mx-auto max-w-2xl">
+        {persistenceError ? <p className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{persistenceError}</p> : null}
         <div className="mb-8">
           <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
             {mode === "create" ? "Add New Product" : "Edit Product"}

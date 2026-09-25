@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { useAuth } from "@/lib/auth-context";
-import { getSellerByUserId, getSellerProducts, deleteSellerProduct, updateSellerProfile } from "@/lib/seller-storage";
+import { getSellerByUserId, getSellerProducts, deleteSellerProduct, updateSellerProfile, updateSeller } from "@/lib/seller-storage";
 import type { Seller } from "@/types/seller";
 import type { SellerProduct } from "@/types/product";
 import { formatCents } from "@/lib/money";
@@ -17,6 +17,8 @@ import { SellerReturnRequestsSection } from "@/components/seller/seller-return-r
 import { SellerSupportSection } from "@/components/seller/seller-support-section";
 import { getAllOrders } from "@/lib/order-storage";
 import { getAvailableInventory, getSoldQuantity } from "@/lib/inventory-storage";
+import { getDataSourceMode } from "@/lib/adapters/config";
+import { deleteProductFromSupabase, getSellerFromSupabase, getSellerIdForUser, getSellerProductsFromSupabase, updateSellerProfileInSupabase } from "@/lib/supabase/product-repository";
 
 export function SellerDashboardPage() {
   const router = useRouter();
@@ -25,6 +27,8 @@ export function SellerDashboardPage() {
   const [products, setProducts] = useState<SellerProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileMessage, setProfileMessage] = useState("");
+  const useSupabase = getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid";
+  const [supabaseSellerId, setSupabaseSellerId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -32,7 +36,7 @@ export function SellerDashboardPage() {
       return;
     }
 
-    const loadSellerData = () => {
+    const loadSellerData = async () => {
       const sellerData = getSellerByUserId(user.id);
       if (!sellerData) {
         router.push("/seller/register");
@@ -40,21 +44,79 @@ export function SellerDashboardPage() {
       }
       setSeller(sellerData);
 
-      const sellerProducts = getSellerProducts(sellerData.id);
-      setProducts(sellerProducts);
+      if (useSupabase) {
+        try {
+          const remoteSellerId = sellerData.supabaseSellerId ?? await getSellerIdForUser(user.id);
+          if (!remoteSellerId) {
+            setProducts(getSellerProducts(sellerData.id));
+            setLoading(false);
+            return;
+          }
+          const remoteSeller = await getSellerFromSupabase(user.id);
+          if (!remoteSeller) throw new Error("Supabase seller profile was not found after identity mapping");
+          const mappedSeller = {
+            ...sellerData,
+            supabaseSellerId: remoteSellerId,
+            storeName: remoteSeller.store_name,
+            bio: remoteSeller.bio ?? "",
+            logoUrl: remoteSeller.logo_url ?? undefined,
+            contactEmail: remoteSeller.contact_email ?? undefined,
+            contactPhone: remoteSeller.contact_phone ?? undefined,
+            approvalStatus: remoteSeller.approval_status,
+            isActive: remoteSeller.is_active,
+            verificationStatus: remoteSeller.verification_status,
+            verificationNote: remoteSeller.verification_note ?? undefined,
+            createdAt: remoteSeller.created_at,
+          };
+          updateSeller(user.id, mappedSeller);
+          setSeller(mappedSeller);
+          setSupabaseSellerId(remoteSellerId);
+          if (remoteSellerId) {
+            const remoteProducts = await getSellerProductsFromSupabase(remoteSellerId);
+            setProducts(remoteProducts.map((product) => ({
+              ...product,
+              sellerId: remoteSellerId,
+              sellerName: mappedSeller.storeName,
+              createdAt: product.createdAt ?? new Date().toISOString(),
+              updatedAt: product.updatedAt ?? new Date().toISOString(),
+              approvalStatus: product.approvalStatus ?? "pending",
+            })));
+          } else {
+            setProducts(getSellerProducts(sellerData.id));
+          }
+        } catch (error) {
+          console.error("Unable to load Supabase seller products:", error);
+          setProducts([]);
+        }
+      } else {
+        setProducts(getSellerProducts(sellerData.id));
+      }
       setLoading(false);
     };
 
-    loadSellerData();
-  }, [user, router]);
+    void loadSellerData();
+  }, [user, router, useSupabase]);
 
   const handleDeleteProduct = async (productId: string) => {
     if (!confirm("Are you sure you want to delete this product?")) return;
 
-    const success = seller ? deleteSellerProduct(productId, seller.id) : false;
+    let success = false;
+    if (useSupabase && supabaseSellerId) {
+      try {
+        await deleteProductFromSupabase(productId);
+        success = true;
+      } catch (error) {
+        console.error("Unable to delete Supabase seller product:", error);
+      }
+    } else {
+      success = seller ? deleteSellerProduct(productId, seller.id) : false;
+    }
     if (success && seller) {
-      const updatedProducts = getSellerProducts(seller.id);
-      setProducts(updatedProducts);
+      if (useSupabase && supabaseSellerId) {
+        setProducts(products.filter((product) => product.id !== productId));
+      } else {
+        setProducts(getSellerProducts(seller.id));
+      }
     }
   };
 
@@ -79,19 +141,40 @@ export function SellerDashboardPage() {
   const totalInventory = products.reduce((sum, p) => sum + p.inventory, 0);
   const totalRevenue = products.reduce((sum, p) => sum + (p.priceCents * p.inventory), 0);
   const orders = getAllOrders();
-  const saveProfile = (event: React.FormEvent<HTMLFormElement>) => {
+  const saveProfile = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!seller) return;
     const form = new FormData(event.currentTarget);
-    const updated = updateSellerProfile(seller.userId, {
+    const updates = {
       storeName: String(form.get("storeName") || ""),
       bio: String(form.get("bio") || ""),
       logoUrl: String(form.get("logoUrl") || ""),
       contactEmail: String(form.get("contactEmail") || ""),
       contactPhone: String(form.get("contactPhone") || ""),
-    });
-    setProfileMessage(updated ? "Store profile updated." : "Unable to update store profile.");
-    if (updated) setSeller(updated);
+    };
+
+    try {
+      if (useSupabase && seller.supabaseSellerId) {
+        const remoteSeller = await updateSellerProfileInSupabase(seller.supabaseSellerId, updates);
+        const updated = updateSeller(seller.userId, {
+          supabaseSellerId: remoteSeller.id,
+          storeName: remoteSeller.store_name,
+          bio: remoteSeller.bio ?? "",
+          logoUrl: remoteSeller.logo_url ?? undefined,
+          contactEmail: remoteSeller.contact_email ?? undefined,
+          contactPhone: remoteSeller.contact_phone ?? undefined,
+        });
+        setProfileMessage(updated ? "Store profile updated." : "Unable to update store profile.");
+        if (updated) setSeller(updated);
+      } else {
+        const updated = updateSellerProfile(seller.userId, updates);
+        setProfileMessage(updated ? "Store profile updated." : "Unable to update store profile.");
+        if (updated) setSeller(updated);
+      }
+    } catch (error) {
+      console.error("Unable to update Supabase seller profile:", error);
+      setProfileMessage("Unable to update store profile.");
+    }
   };
 
   return (

@@ -49,7 +49,9 @@ export function AdminProductsPage() {
         setProducts(await getAdminProductsFromSupabase());
         return;
       } catch (error) {
-        console.error("Unable to load Supabase admin products; retaining local catalog:", error);
+        console.error("Unable to load Supabase admin products:", error);
+        setProducts([]);
+        return;
       }
     }
     setProducts(getCatalogProductsForAdmin());
