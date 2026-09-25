@@ -15,10 +15,6 @@ const ADMIN_PRODUCT_OVERRIDES_KEY = "shopnest_product_overrides";
 const ADMIN_DELETED_PRODUCTS_KEY = "shopnest_deleted_products";
 export const ADMIN_PRODUCTS_UPDATED_EVENT = "shopnest:admin-products-updated";
 
-// Admin credentials (demo purposes)
-const ADMIN_EMAIL = "admin@shopnest.com";
-const ADMIN_PASSWORD = "admin123";
-
 // Helper functions for localStorage
 const getStoredAdminActions = (): AdminAction[] => {
   if (typeof window === "undefined") return [];
@@ -40,7 +36,14 @@ const saveStoredAdminActions = (actions: AdminAction[]) => {
 };
 
 export function validateAdminCredentials(email: string, password: string): boolean {
-  return email === ADMIN_EMAIL && password === ADMIN_PASSWORD;
+  if (typeof window === "undefined") return false;
+  try {
+    const stored = localStorage.getItem(ADMIN_CREDENTIALS_KEY);
+    const credentials = stored ? JSON.parse(stored) as { email?: string; password?: string } : null;
+    return credentials?.email === email && credentials.password === password;
+  } catch {
+    return false;
+  }
 }
 
 export function logAdminAction(action: Omit<AdminAction, "id" | "timestamp">): void {

@@ -12,6 +12,7 @@ export function AdminLoginPage() {
   const { adminSignIn } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -85,23 +86,26 @@ export function AdminLoginPage() {
               <label htmlFor="password" className="block text-sm font-medium mb-2">
                 Password *
               </label>
-              <input
-                type="password"
-                id="password"
-                name="password"
-                required
-                value={formData.password}
-                onChange={handleInputChange}
-                className="w-full h-11 rounded-full border border-border bg-white px-4 text-sm outline-none focus:ring-4 focus:ring-brand/20"
-                placeholder="••••••••"
-              />
-            </div>
-
-            <div className="bg-brand/5 rounded-xl p-4">
-              <h3 className="font-semibold text-sm mb-2">Demo Credentials</h3>
-              <div className="text-sm text-muted space-y-1">
-                <p><span className="font-medium">Email:</span> admin@shopnest.com</p>
-                <p><span className="font-medium">Password:</span> admin123</p>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  id="password"
+                  name="password"
+                  required
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  className="w-full h-11 rounded-full border border-border bg-white px-4 pr-20 text-sm outline-none focus:ring-4 focus:ring-brand/20"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  className="absolute inset-y-0 right-4 text-sm font-semibold text-muted hover:text-foreground"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
               </div>
             </div>
 

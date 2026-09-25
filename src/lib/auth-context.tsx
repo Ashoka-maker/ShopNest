@@ -287,8 +287,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (result.success && result.user) {
           const hydratedUser = await getClientUser();
           const convertedUser = convertSupabaseUser(hydratedUser ?? result.user);
+          const profileRole = hydratedUser?.profile?.role;
 
-          if (convertedUser.role === "admin") {
+          if (profileRole === "admin") {
             setUser(convertedUser);
             setIsLoading(false);
             return { success: true };
