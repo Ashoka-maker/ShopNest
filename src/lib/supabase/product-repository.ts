@@ -330,9 +330,30 @@ export async function createSellerInSupabase(userId: string, storeName: string, 
 }
 
 export async function ensureSellerInSupabase(userId: string, storeName: string, bio: string): Promise<string> {
+  const supabase = createClient();
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user) {
+    throw new Error(authError?.message ?? "A Supabase-authenticated seller session is required");
+  }
+  if (authData.user.id !== userId) {
+    throw new Error("The local seller user ID does not match the authenticated Supabase user");
+  }
+
   const existingSellerId = await getSellerIdForUser(userId);
   if (existingSellerId) return existingSellerId;
-  return createSellerInSupabase(userId, storeName, bio);
+
+  const response = await fetch("/api/seller/provision", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ storeName, bio }),
+  });
+  const result = await response.json().catch(() => null) as { sellerId?: string; error?: { message?: string } } | null;
+
+  if (!response.ok || !result?.sellerId) {
+    throw new Error(result?.error?.message ?? `Seller provisioning failed with status ${response.status}`);
+  }
+
+  return result.sellerId;
 }
 
 export type SupabaseSeller = {
