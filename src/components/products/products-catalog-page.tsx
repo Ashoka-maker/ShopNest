@@ -7,18 +7,27 @@ import { ProductGrid } from "@/components/products/product-grid";
 import { SearchForm } from "@/components/products/search-form";
 import { Container } from "@/components/layout/container";
 import { parseSort, queryProducts } from "@/features/products/query";
+import { loadSupabaseProducts, SUPABASE_PRODUCTS_UPDATED_EVENT } from "@/features/products/data";
 import { SELLER_PRODUCTS_UPDATED_EVENT } from "@/lib/seller-storage";
 
 export function ProductsCatalogPage() {
   const searchParams = useSearchParams();
   const [, setProductsRevision] = useState(0);
+  const [isLoaded, setIsLoaded] = useState(false);
   useEffect(() => {
+    const loadProducts = async () => {
+      await loadSupabaseProducts();
+      setIsLoaded(true);
+    };
+    void loadProducts();
     const refresh = () => setProductsRevision((revision) => revision + 1);
     window.addEventListener("storage", refresh);
     window.addEventListener(SELLER_PRODUCTS_UPDATED_EVENT, refresh);
+    window.addEventListener(SUPABASE_PRODUCTS_UPDATED_EVENT, refresh);
     return () => {
       window.removeEventListener("storage", refresh);
       window.removeEventListener(SELLER_PRODUCTS_UPDATED_EVENT, refresh);
+      window.removeEventListener(SUPABASE_PRODUCTS_UPDATED_EVENT, refresh);
     };
   }, []);
   const query = {
@@ -28,7 +37,7 @@ export function ProductsCatalogPage() {
     price: searchParams.get("price") ?? undefined,
     availability: searchParams.get("availability") ?? undefined,
   };
-  const products = queryProducts(query);
+  const products = isLoaded ? queryProducts(query) : [];
 
   return (
     <Container className="py-8 sm:py-10">
