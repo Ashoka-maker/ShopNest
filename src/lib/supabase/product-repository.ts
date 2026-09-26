@@ -104,9 +104,13 @@ const PRODUCT_SELECT = "*, categories:category_id(*), sellers:seller_id(id, stor
 const PUBLIC_PRODUCT_SELECT = "*, categories:category_id(*)";
 
 function categorySlug(value: string | undefined): ProductCategorySlug {
-  return CATEGORY_SLUGS.includes(value as ProductCategorySlug)
-    ? (value as ProductCategorySlug)
-    : "home-living";
+  if (!value) return "home-living";
+  
+  // Case-insensitive matching to handle different casing from Supabase
+  const normalizedValue = value.toLowerCase();
+  const matchedSlug = CATEGORY_SLUGS.find(slug => slug.toLowerCase() === normalizedValue);
+  
+  return matchedSlug ?? "home-living";
 }
 
 function firstRelation<T>(relation: T | T[] | null | undefined): T | null {
