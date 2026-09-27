@@ -38,6 +38,7 @@ export function AdminSellersPage() {
             supabaseSellerId: remoteSeller.id,
             storeName: remoteSeller.store_name,
             bio: remoteSeller.bio ?? "",
+            createdAt: remoteSeller.created_at,
             logoUrl: remoteSeller.logo_url ?? undefined,
             contactEmail: remoteSeller.contact_email ?? undefined,
             contactPhone: remoteSeller.contact_phone ?? undefined,
