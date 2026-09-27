@@ -109,14 +109,13 @@ const CATEGORY_SLUGS: ProductCategorySlug[] = [
 const PRODUCT_SELECT = "*, categories:category_id(*), sellers:seller_id(id, store_name)";
 const PUBLIC_PRODUCT_SELECT = "*, categories:category_id(*)";
 
+function normalizeCategorySlug(value: string | undefined): ProductCategorySlug | null {
+  const normalizedValue = value?.trim().toLowerCase();
+  return CATEGORY_SLUGS.find((slug) => slug === normalizedValue) ?? null;
+}
+
 function categorySlug(value: string | undefined): ProductCategorySlug {
-  if (!value) return "home-living";
-  
-  // Case-insensitive matching to handle different casing from Supabase
-  const normalizedValue = value.toLowerCase();
-  const matchedSlug = CATEGORY_SLUGS.find(slug => slug.toLowerCase() === normalizedValue);
-  
-  return matchedSlug ?? "home-living";
+  return normalizeCategorySlug(value) ?? "home-living";
 }
 
 function firstRelation<T>(relation: T | T[] | null | undefined): T | null {
@@ -282,13 +281,17 @@ export async function getCategoriesFromSupabase(): Promise<ProductCategory[]> {
     .order("name");
 
   if (error) throw error;
-  return ((data ?? []) as unknown as CategoryRow[]).map((row) => ({
-    id: row.id,
-    slug: categorySlug(row.slug),
-    name: row.name,
-    description: row.description,
-    createdAt: row.created_at,
-  }));
+  return ((data ?? []) as unknown as CategoryRow[]).flatMap((row) => {
+    const slug = normalizeCategorySlug(row.slug);
+    if (!slug) return [];
+    return [{
+      id: row.id,
+      slug,
+      name: row.name,
+      description: row.description,
+      createdAt: row.created_at,
+    }];
+  });
 }
 
 export async function getProductVariants(productId: string): Promise<ProductVariant[]> {
@@ -457,9 +460,11 @@ export async function updateSellerModerationInSupabase(
 }
 
 async function categoryIdForSlug(slug: ProductCategorySlug): Promise<string> {
+  const normalizedSlug = normalizeCategorySlug(slug);
+  if (!normalizedSlug) throw new Error(`Unsupported Supabase category slug: ${slug}`);
   const categories = await getCategoriesFromSupabase();
-  const category = categories.find((item) => item.slug === slug);
-  if (!category) throw new Error(`Supabase category not found: ${slug}`);
+  const category = categories.find((item) => item.slug === normalizedSlug);
+  if (!category) throw new Error(`Supabase category not found: ${normalizedSlug}`);
   return category.id;
 }
 
