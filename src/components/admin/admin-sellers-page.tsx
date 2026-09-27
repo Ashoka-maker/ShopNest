@@ -8,6 +8,8 @@ import { Container } from "@/components/layout/container";
 import { useAuth } from "@/lib/auth-context";
 import { getAllSellers, approveSeller, rejectSeller, toggleSellerActive, updateSellerVerification } from "@/lib/admin-storage";
 import { SELLERS_UPDATED_EVENT } from "@/lib/seller-storage";
+import { getAllSellersFromSupabase, updateSellerModerationInSupabase } from "@/lib/supabase/product-repository";
+import { getDataSourceMode } from "@/lib/adapters/config";
 import type { Seller } from "@/types/seller";
 
 export function AdminSellersPage() {
@@ -15,7 +17,9 @@ export function AdminSellersPage() {
   const { user, isAdmin } = useAuth();
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
+  const [supabaseError, setSupabaseError] = useState<string | null>(null);
   const [verificationNotes, setVerificationNotes] = useState<Record<string, string>>({});
+  const useSupabase = getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid";
 
   useEffect(() => {
     if (!user || !isAdmin) {
@@ -23,49 +27,124 @@ export function AdminSellersPage() {
       return;
     }
 
-    const loadSellers = () => {
-      const allSellers = getAllSellers();
-      setSellers(allSellers);
+    const loadSellers = async () => {
+      setSupabaseError(null);
+      try {
+        if (useSupabase) {
+          const remoteSellers = await getAllSellersFromSupabase();
+          setSellers(remoteSellers.map((remoteSeller) => ({
+            id: remoteSeller.id,
+            userId: remoteSeller.user_id,
+            supabaseSellerId: remoteSeller.id,
+            storeName: remoteSeller.store_name,
+            bio: remoteSeller.bio ?? "",
+            logoUrl: remoteSeller.logo_url ?? undefined,
+            contactEmail: remoteSeller.contact_email ?? undefined,
+            contactPhone: remoteSeller.contact_phone ?? undefined,
+            approvalStatus: remoteSeller.approval_status,
+            isActive: remoteSeller.is_active,
+            verificationStatus: remoteSeller.verification_status,
+            verificationNote: remoteSeller.verification_note ?? undefined,
+          })));
+        } else {
+          setSellers(getAllSellers());
+        }
+      } catch (error) {
+        console.error("Unable to load Supabase sellers:", error);
+        if (useSupabase) {
+          setSellers([]);
+          setSupabaseError("Unable to load sellers from Supabase. Local seller data was not used.");
+        } else {
+          setSellers(getAllSellers());
+        }
+      }
       setLoading(false);
     };
 
-    loadSellers();
-    window.addEventListener(SELLERS_UPDATED_EVENT, loadSellers);
-    window.addEventListener("storage", loadSellers);
+    void loadSellers();
+    const refresh = () => void loadSellers();
+    window.addEventListener(SELLERS_UPDATED_EVENT, refresh);
+    window.addEventListener("storage", refresh);
     return () => {
-      window.removeEventListener(SELLERS_UPDATED_EVENT, loadSellers);
-      window.removeEventListener("storage", loadSellers);
+      window.removeEventListener(SELLERS_UPDATED_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
     };
-  }, [user, isAdmin, router]);
+  }, [user, isAdmin, router, useSupabase]);
 
   const handleApproveSeller = async (sellerId: string) => {
-    const success = approveSeller(sellerId);
-    if (success) {
-      const updatedSellers = getAllSellers();
-      setSellers(updatedSellers);
+    const seller = sellers.find((item) => item.id === sellerId);
+    if (useSupabase) {
+      if (!seller?.supabaseSellerId) {
+        setSupabaseError("Seller has no Supabase record; approval was not changed.");
+        return;
+      }
+      try {
+        const remote = await updateSellerModerationInSupabase(seller.supabaseSellerId, { approvalStatus: "approved", isActive: true });
+        setSellers((current) => current.map((item) => item.id === sellerId ? { ...item, approvalStatus: remote.approval_status, isActive: remote.is_active } : item));
+      } catch (error) {
+        console.error("Unable to approve Supabase seller:", error);
+        setSupabaseError("Unable to save seller approval to Supabase.");
+      }
+    } else if (approveSeller(sellerId)) {
+      setSellers(getAllSellers());
     }
   };
 
   const handleRejectSeller = async (sellerId: string) => {
     if (!confirm("Are you sure you want to reject this seller?")) return;
 
-    const success = rejectSeller(sellerId);
-    if (success) {
-      const updatedSellers = getAllSellers();
-      setSellers(updatedSellers);
+    const seller = sellers.find((item) => item.id === sellerId);
+    if (useSupabase) {
+      if (!seller?.supabaseSellerId) {
+        setSupabaseError("Seller has no Supabase record; rejection was not changed.");
+        return;
+      }
+      try {
+        const remote = await updateSellerModerationInSupabase(seller.supabaseSellerId, { approvalStatus: "rejected", isActive: false });
+        setSellers((current) => current.map((item) => item.id === sellerId ? { ...item, approvalStatus: remote.approval_status, isActive: remote.is_active } : item));
+      } catch (error) {
+        console.error("Unable to reject Supabase seller:", error);
+        setSupabaseError("Unable to save seller rejection to Supabase.");
+      }
+    } else if (rejectSeller(sellerId)) {
+      setSellers(getAllSellers());
     }
   };
 
   const handleToggleActive = async (sellerId: string) => {
-    const success = toggleSellerActive(sellerId);
-    if (success) {
-      const updatedSellers = getAllSellers();
-      setSellers(updatedSellers);
+    const seller = sellers.find((item) => item.id === sellerId);
+    if (useSupabase) {
+      if (!seller?.supabaseSellerId) {
+        setSupabaseError("Seller has no Supabase record; activation was not changed.");
+        return;
+      }
+      try {
+        const remote = await updateSellerModerationInSupabase(seller.supabaseSellerId, { isActive: !seller.isActive });
+        setSellers((current) => current.map((item) => item.id === sellerId ? { ...item, isActive: remote.is_active } : item));
+      } catch (error) {
+        console.error("Unable to update Supabase seller activation:", error);
+        setSupabaseError("Unable to save seller activation to Supabase.");
+      }
+    } else if (toggleSellerActive(sellerId)) {
+      setSellers(getAllSellers());
     }
   };
 
-  const handleVerification = (sellerId: string, status: "pending" | "verified" | "rejected") => {
-    if (updateSellerVerification(sellerId, status, verificationNotes[sellerId])) {
+  const handleVerification = async (sellerId: string, status: "pending" | "verified" | "rejected") => {
+    const seller = sellers.find((item) => item.id === sellerId);
+    if (useSupabase) {
+      if (!seller?.supabaseSellerId) {
+        setSupabaseError("Seller has no Supabase record; verification was not changed.");
+        return;
+      }
+      try {
+        const remote = await updateSellerModerationInSupabase(seller.supabaseSellerId, { verificationStatus: status, verificationNote: verificationNotes[sellerId] ?? "" });
+        setSellers((current) => current.map((item) => item.id === sellerId ? { ...item, verificationStatus: remote.verification_status, verificationNote: remote.verification_note ?? undefined } : item));
+      } catch (error) {
+        console.error("Unable to update Supabase seller verification:", error);
+        setSupabaseError("Unable to save seller verification to Supabase.");
+      }
+    } else if (updateSellerVerification(sellerId, status, verificationNotes[sellerId])) {
       setSellers(getAllSellers());
     }
   };
@@ -103,6 +182,7 @@ export function AdminSellersPage() {
             <Button variant="secondary">Back to Dashboard</Button>
           </Link>
         </div>
+        {supabaseError && <p role="alert" className="mb-6 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{supabaseError}</p>}
 
         {/* Pending Sellers */}
         {pendingSellers.length > 0 && (

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { useAuth } from "@/lib/auth-context";
-import { getSellerByUserId, getSellerProducts, deleteSellerProduct, updateSellerProfile, updateSeller } from "@/lib/seller-storage";
+import { getSellerByUserId, getSellerProducts, deleteSellerProduct, updateSellerProfile, updateSeller, saveSeller } from "@/lib/seller-storage";
 import type { Seller } from "@/types/seller";
 import type { SellerProduct } from "@/types/product";
 import { formatCents } from "@/lib/money";
@@ -18,7 +18,7 @@ import { SellerSupportSection } from "@/components/seller/seller-support-section
 import { getAllOrders } from "@/lib/order-storage";
 import { getAvailableInventory, getSoldQuantity } from "@/lib/inventory-storage";
 import { getDataSourceMode } from "@/lib/adapters/config";
-import { deleteProductFromSupabase, getSellerFromSupabase, getSellerIdForUser, getSellerProductsFromSupabase, updateSellerProfileInSupabase } from "@/lib/supabase/product-repository";
+import { deleteProductFromSupabase, getSellerFromSupabase, getSellerProductsFromSupabase, updateSellerProfileInSupabase } from "@/lib/supabase/product-repository";
 
 export function SellerDashboardPage() {
   const router = useRouter();
@@ -26,6 +26,7 @@ export function SellerDashboardPage() {
   const [seller, setSeller] = useState<Seller | null>(null);
   const [products, setProducts] = useState<SellerProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sellerLoadError, setSellerLoadError] = useState<string | null>(null);
   const [profileMessage, setProfileMessage] = useState("");
   const useSupabase = getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid";
   const [supabaseSellerId, setSupabaseSellerId] = useState<string | null>(null);
@@ -37,26 +38,18 @@ export function SellerDashboardPage() {
     }
 
     const loadSellerData = async () => {
-      const sellerData = getSellerByUserId(user.id);
-      if (!sellerData) {
-        router.push("/seller/register");
-        return;
-      }
-      setSeller(sellerData);
-
       if (useSupabase) {
         try {
-          const remoteSellerId = sellerData.supabaseSellerId ?? await getSellerIdForUser(user.id);
-          if (!remoteSellerId) {
-            setProducts(getSellerProducts(sellerData.id));
-            setLoading(false);
+          const remoteSeller = await getSellerFromSupabase(user.id);
+          if (!remoteSeller) {
+            router.push("/seller/register");
             return;
           }
-          const remoteSeller = await getSellerFromSupabase(user.id);
-          if (!remoteSeller) throw new Error("Supabase seller profile was not found after identity mapping");
-          const mappedSeller = {
-            ...sellerData,
-            supabaseSellerId: remoteSellerId,
+
+          const mappedSeller: Seller = {
+            id: remoteSeller.id,
+            userId: remoteSeller.user_id,
+            supabaseSellerId: remoteSeller.id,
             storeName: remoteSeller.store_name,
             bio: remoteSeller.bio ?? "",
             logoUrl: remoteSeller.logo_url ?? undefined,
@@ -68,29 +61,41 @@ export function SellerDashboardPage() {
             verificationNote: remoteSeller.verification_note ?? undefined,
             createdAt: remoteSeller.created_at,
           };
-          updateSeller(user.id, mappedSeller);
+
+          if (!updateSeller(user.id, mappedSeller)) saveSeller(mappedSeller);
           setSeller(mappedSeller);
-          setSupabaseSellerId(remoteSellerId);
-          if (remoteSellerId) {
-            const remoteProducts = await getSellerProductsFromSupabase(remoteSellerId);
+          setSupabaseSellerId(remoteSeller.id);
+          try {
+            const remoteProducts = await getSellerProductsFromSupabase(remoteSeller.id);
             setProducts(remoteProducts.map((product) => ({
               ...product,
-              sellerId: remoteSellerId,
+              sellerId: remoteSeller.id,
               sellerName: mappedSeller.storeName,
               createdAt: product.createdAt ?? new Date().toISOString(),
               updatedAt: product.updatedAt ?? new Date().toISOString(),
               approvalStatus: product.approvalStatus ?? "pending",
             })));
-          } else {
-            setProducts(getSellerProducts(sellerData.id));
+          } catch (error) {
+            console.error("Unable to load Supabase seller products:", error);
+            setProducts([]);
           }
         } catch (error) {
-          console.error("Unable to load Supabase seller products:", error);
+          console.error("Unable to load Supabase seller profile:", error);
+          setSellerLoadError("Unable to load your seller profile from Supabase. Please try again.");
           setProducts([]);
+        } finally {
+          setLoading(false);
         }
-      } else {
-        setProducts(getSellerProducts(sellerData.id));
+        return;
       }
+
+      const sellerData = getSellerByUserId(user.id);
+      if (!sellerData) {
+        router.push("/seller/register");
+        return;
+      }
+      setSeller(sellerData);
+      setProducts(getSellerProducts(sellerData.id));
       setLoading(false);
     };
 
@@ -134,6 +139,13 @@ export function SellerDashboardPage() {
   }
 
   if (!seller) {
+    if (sellerLoadError) {
+      return (
+        <Container className="py-8 sm:py-12">
+          <p role="alert" className="mx-auto max-w-6xl text-sm text-red-700">{sellerLoadError}</p>
+        </Container>
+      );
+    }
     return null; // Will redirect
   }
 
