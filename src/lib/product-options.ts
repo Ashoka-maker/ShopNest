@@ -3,7 +3,7 @@ import type { Product, ProductOption, ProductOptionType } from "@/types/product"
 type ProductOptionSource = Pick<Product, "options" | "sizes" | "inventoryBySize">;
 
 export function getProductOptions(product: ProductOptionSource): ProductOption[] {
-  const source = product.options ?? [...new Set(product.sizes ?? [])].map((value) => ({
+  const source: ProductOption[] = product.options ?? [...new Set(product.sizes ?? [])].map((value) => ({
     value,
     inventory: product.inventoryBySize?.[value] ?? 0,
   }));

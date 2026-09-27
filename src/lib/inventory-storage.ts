@@ -31,10 +31,10 @@ export function getAvailableInventory(product: ProductInventory): number {
     return product.options.reduce((total, option) => total + Math.max(0, option.inventory), 0);
   }
   if (product.inventoryBySize && Object.keys(product.inventoryBySize).length > 0) {
-    return Object.values(product.inventoryBySize).reduce((total, quantity) => total + Math.max(0, quantity ?? 0), 0);
+    return Object.values(product.inventoryBySize).reduce<number>((total, quantity) => total + Math.max(0, quantity ?? 0), 0);
   }
   if (product.sizes?.length) {
-    return product.sizes.reduce((total, size) => total + getAvailableInventoryForSize(product, size), 0);
+    return product.sizes.reduce<number>((total, size) => total + getAvailableInventoryForSize(product, size), 0);
   }
   return Math.max(0, product.inventory);
 }
