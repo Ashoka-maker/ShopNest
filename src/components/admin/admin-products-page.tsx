@@ -10,7 +10,8 @@ import { CATEGORIES } from "@/lib/constants";
 import { deleteCatalogProduct, getCatalogProductsForAdmin, moderateCatalogProduct, PRODUCT_CATALOG_UPDATED_EVENT } from "@/features/products/data";
 import { formatCents } from "@/lib/money";
 import { getAvailableInventoryById } from "@/lib/inventory-storage";
-import type { Product, ProductCategorySlug, ProductSize } from "@/types/product";
+import type { Product, ProductCategorySlug, ProductOption, ProductOptionType, ProductSize, SizeInventory } from "@/types/product";
+import { getProductOptionType, getProductOptions } from "@/lib/product-options";
 import { getDataSourceMode } from "@/lib/adapters/config";
 import {
   createAdminProductInSupabase,
@@ -22,9 +23,9 @@ import {
 
 type FormState = {
   name: string; description: string; price: string; compareAt: string; category: ProductCategorySlug;
-  inventory: string; imageUrl: string; sellerName: string; sellerId: string; sizes: ProductSize[];
+  inventory: string; imageUrl: string; sellerName: string; sellerId: string; optionType: ProductOptionType; options: ProductOption[]; sizes: ProductSize[]; inventoryBySize: SizeInventory;
 };
-const emptyForm: FormState = { name: "", description: "", price: "", compareAt: "", category: "home-living", inventory: "0", imageUrl: "", sellerName: "ShopNest", sellerId: "shopnest-admin", sizes: [] };
+const emptyForm: FormState = { name: "", description: "", price: "", compareAt: "", category: "home-living", inventory: "0", imageUrl: "", sellerName: "ShopNest", sellerId: "shopnest-admin", optionType: "none", options: [], sizes: [], inventoryBySize: {} };
 
 export function AdminProductsPage() {
   const router = useRouter();
@@ -73,8 +74,9 @@ export function AdminProductsPage() {
   }).sort((a, b) => sort === "price-low" ? a.priceCents - b.priceCents : sort === "price-high" ? b.priceCents - a.priceCents : (b.createdAt || "").localeCompare(a.createdAt || "")), [products, query, category, seller, status, sort]);
 
   const openEdit = (product: Product) => {
+    const options = getProductOptions(product);
     setEditing(product);
-    setForm({ name: product.name, description: product.description, price: String(product.priceCents / 100), compareAt: product.compareAtPriceCents ? String(product.compareAtPriceCents / 100) : "", category: product.category, inventory: String(product.inventory), imageUrl: product.imageUrl, sellerName: product.sellerName, sellerId: product.sellerId, sizes: product.sizes || [] });
+    setForm({ name: product.name, description: product.description, price: String(product.priceCents / 100), compareAt: product.compareAtPriceCents ? String(product.compareAtPriceCents / 100) : "", category: product.category, inventory: String(product.inventory), imageUrl: product.imageUrl, sellerName: product.sellerName, sellerId: product.sellerId, optionType: getProductOptionType(product), options, sizes: options.map((option) => option.value), inventoryBySize: Object.fromEntries(options.map((option) => [option.value, option.inventory])) });
   };
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -86,7 +88,7 @@ export function AdminProductsPage() {
     const product: Product = {
       ...base, name: form.name.trim(), slug: editing?.slug || `${form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`, createdAt: editing?.createdAt || new Date().toISOString(),
       description: form.description.trim(), priceCents: Math.round(Number(form.price) * 100), compareAtPriceCents: form.compareAt ? Math.round(Number(form.compareAt) * 100) : null,
-      category: form.category, inventory: Math.max(0, Number(form.inventory) || 0), imageUrl: form.imageUrl.trim(), sellerName: form.sellerName.trim(), sellerId: form.sellerId.trim() || "shopnest-admin", sizes: form.sizes, updatedAt: new Date().toISOString(),
+      category: form.category, inventory: Math.max(0, Number(form.inventory) || 0), imageUrl: form.imageUrl.trim(), sellerName: form.sellerName.trim(), sellerId: form.sellerId.trim() || "shopnest-admin", optionType: form.optionType, options: form.options, sizes: form.sizes, inventoryBySize: form.inventoryBySize, updatedAt: new Date().toISOString(),
       approvalStatus: editing?.approvalStatus || "approved", publishStatus: editing?.publishStatus || "published",
     };
     if (useSupabase) {
@@ -100,6 +102,8 @@ export function AdminProductsPage() {
           category: product.category,
           inventory: product.inventory,
           imageUrl: product.imageUrl,
+          optionType: product.optionType,
+          options: product.options,
           sizes: product.sizes || [],
           inventoryBySize: product.inventoryBySize,
         });
@@ -112,6 +116,8 @@ export function AdminProductsPage() {
           category: product.category,
           inventory: product.inventory,
           imageUrl: product.imageUrl,
+          optionType: product.optionType,
+          options: product.options,
           sizes: product.sizes || [],
           inventoryBySize: product.inventoryBySize,
         });

@@ -6,7 +6,7 @@ import type { ProductSize } from "@/types/product";
 
 type CartContextType = {
   cart: Cart;
-  addToCart: (productId: string, quantity?: number, size?: ProductSize) => void;
+  addToCart: (productId: string, quantity?: number, size?: ProductSize, variantId?: string) => void;
   removeFromCart: (productId: string, size?: ProductSize) => void;
   updateQuantity: (productId: string, quantity: number, size?: ProductSize) => void;
   clearCart: () => void;

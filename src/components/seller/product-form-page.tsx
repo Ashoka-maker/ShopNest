@@ -15,7 +15,8 @@ import {
 } from "@/lib/seller-storage";
 import { CATEGORIES } from "@/lib/constants";
 import { formatCents } from "@/lib/money";
-import { PRODUCT_SIZES, type Product, type ProductFormData, type SellerProduct } from "@/types/product";
+import { PRODUCT_OPTION_PRESETS, PRODUCT_OPTION_TYPES, type Product, type ProductFormData, type ProductOption, type ProductOptionType, type SellerProduct } from "@/types/product";
+import { getProductOptionType, getProductOptionTypeLabel, getProductOptions, getUniqueOptionValues } from "@/lib/product-options";
 import { getDataSourceMode } from "@/lib/adapters/config";
 import {
   createSellerProductInSupabase,
@@ -50,9 +51,12 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
     category: "home-living",
     inventory: 0,
     imageUrl: "",
+    optionType: "none",
+    options: [],
     sizes: [],
     inventoryBySize: {},
   });
+  const [optionValueDraft, setOptionValueDraft] = useState("");
 
   useEffect(() => {
     const loadData = async () => {
@@ -100,6 +104,7 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
           return;
         }
         setExistingProduct(remoteProduct ? null : product);
+        const options = getProductOptions(productToEdit);
         setFormData({
           name: productToEdit.name,
           description: productToEdit.description,
@@ -107,12 +112,12 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
           priceCents: productToEdit.priceCents,
           compareAtPriceCents: productToEdit.compareAtPriceCents,
           category: productToEdit.category,
-          inventory: productToEdit.sizes?.length
-            ? productToEdit.sizes.reduce((total, size) => total + (productToEdit.inventoryBySize?.[size] ?? 0), 0)
-            : productToEdit.inventory,
+          inventory: options.length ? options.reduce((total, option) => total + option.inventory, 0) : productToEdit.inventory,
           imageUrl: productToEdit.imageUrl,
-          sizes: productToEdit.sizes ?? [],
-          inventoryBySize: productToEdit.inventoryBySize ?? {},
+          optionType: getProductOptionType(productToEdit),
+          options,
+          sizes: options.map((option) => option.value),
+          inventoryBySize: Object.fromEntries(options.map((option) => [option.value, option.inventory])),
         });
       }
 
@@ -133,6 +138,57 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
+  };
+
+  const applyOptions = (previous: ProductFormData, options: ProductOption[]) => {
+    const uniqueOptions = getProductOptions({ options });
+    const inventoryBySize = Object.fromEntries(uniqueOptions.map((option) => [option.value, option.inventory]));
+    return {
+      ...previous,
+      options: uniqueOptions,
+      sizes: uniqueOptions.map((option) => option.value),
+      inventoryBySize,
+      inventory: uniqueOptions.reduce((total, option) => total + option.inventory, 0),
+    };
+  };
+
+  const handleOptionTypeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const optionType = event.target.value as ProductOptionType;
+    setFormData((previous) => optionType === "none"
+      ? {
+          ...previous,
+          optionType,
+          options: [],
+          sizes: [],
+          inventoryBySize: {},
+          inventory: getProductOptions(previous).reduce((total, option) => total + option.inventory, 0) || previous.inventory,
+        }
+      : { ...previous, optionType });
+  };
+
+  const toggleOption = (value: string, checked: boolean) => {
+    setFormData((previous) => {
+      const options = getProductOptions(previous);
+      const key = value.trim().toLowerCase();
+      const exists = options.some((option) => option.value.toLowerCase() === key);
+      const nextOptions = checked
+        ? exists ? options : [...options, { value: value.trim(), inventory: 0 }]
+        : options.filter((option) => option.value.toLowerCase() !== key);
+      return applyOptions(previous, nextOptions);
+    });
+  };
+
+  const addOptionValue = () => {
+    const value = optionValueDraft.trim();
+    if (!value || getProductOptions(formData).some((option) => option.value.toLowerCase() === value.toLowerCase())) return;
+    setFormData((previous) => applyOptions(previous, [...getProductOptions(previous), { value, inventory: 0 }]));
+    setOptionValueDraft("");
+  };
+
+  const updateOptionInventory = (value: string, inventory: number) => {
+    setFormData((previous) => applyOptions(previous, getProductOptions(previous).map((option) => (
+      option.value === value ? { ...option, inventory } : option
+    ))));
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -244,6 +300,13 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
       setIsSubmitting(false);
     }
   };
+
+  const selectedOptionType = formData.optionType ?? "none";
+  const selectedOptions = getProductOptions(formData);
+  const availableOptionValues = getUniqueOptionValues([
+    ...(PRODUCT_OPTION_PRESETS[selectedOptionType] ?? []),
+    ...selectedOptions.map((option) => option.value),
+  ]);
 
   if (loading) {
     return (
@@ -371,52 +434,68 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
               </select>
             </div>
 
-            {/* Pricing */}
+            {/* Product Options */}
             <div>
-              <p className="block text-sm font-medium mb-2">Available Sizes</p>
-              <div className="flex flex-wrap gap-3">
-                {PRODUCT_SIZES.map((size) => (
-                  <label key={size} className="flex items-center gap-2 rounded-full border border-border bg-white px-4 py-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={formData.sizes.includes(size)}
-                      onChange={(event) => setFormData((prev) => {
-                        const sizes = event.target.checked
-                          ? [...prev.sizes, size]
-                          : prev.sizes.filter((item) => item !== size);
-                        const inventoryBySize = { ...(prev.inventoryBySize || {}) };
-                        if (!event.target.checked) delete inventoryBySize[size];
-                        const inventory = sizes.reduce((total, selectedSize) => total + (inventoryBySize[selectedSize] ?? 0), 0);
-                        return { ...prev, sizes, inventoryBySize, inventory };
-                      })}
-                    />
-                    {size}
-                  </label>
+              <label htmlFor="optionType" className="block text-sm font-medium mb-2">Option Type</label>
+              <select
+                id="optionType"
+                value={selectedOptionType}
+                onChange={handleOptionTypeChange}
+                className="h-11 w-full rounded-full border border-border bg-white px-4 text-sm"
+              >
+                {PRODUCT_OPTION_TYPES.map((optionType) => (
+                  <option key={optionType} value={optionType}>{getProductOptionTypeLabel(optionType)}</option>
                 ))}
-              </div>
-              <p className="mt-1 text-xs text-muted">
-                Leave all unchecked for products without size variants.
-              </p>
-              {formData.sizes.length > 0 ? (
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  {formData.sizes.map((size) => (
-                    <label key={size} className="grid gap-1 text-sm font-medium">
-                      {size} stock
-                      <input
-                        type="number"
-                        min="0"
-                        value={formData.inventoryBySize?.[size] ?? 0}
-                        onChange={(event) => setFormData((prev) => ({
-                          ...prev,
-                          inventoryBySize: { ...(prev.inventoryBySize || {}), [size]: Math.max(0, Number(event.target.value) || 0) },
-                          inventory: Object.values({ ...(prev.inventoryBySize || {}), [size]: Math.max(0, Number(event.target.value) || 0) }).reduce((total, value) => total + (value || 0), 0),
-                        }))}
-                        className="h-10 rounded-lg border border-border bg-white px-3"
-                      />
-                    </label>
-                  ))}
-                </div>
-              ) : null}
+              </select>
+              {selectedOptionType !== "none" ? (
+                <>
+                  {availableOptionValues.length ? (
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      {availableOptionValues.map((value) => (
+                        <label key={value} className="flex items-center gap-2 rounded-full border border-border bg-white px-4 py-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selectedOptions.some((option) => option.value.toLowerCase() === value.toLowerCase())}
+                            onChange={(event) => toggleOption(value, event.target.checked)}
+                          />
+                          {value}
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="mt-4 flex gap-2">
+                    <input
+                      type="text"
+                      value={optionValueDraft}
+                      onChange={(event) => setOptionValueDraft(event.target.value)}
+                      onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addOptionValue(); } }}
+                      className="h-10 min-w-0 flex-1 rounded-lg border border-border bg-white px-3 text-sm"
+                      placeholder={`Add ${getProductOptionTypeLabel(selectedOptionType).toLowerCase()}`}
+                    />
+                    <Button type="button" variant="secondary" onClick={addOptionValue} disabled={!optionValueDraft.trim()}>
+                      Add value
+                    </Button>
+                  </div>
+                  {selectedOptions.length ? (
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {selectedOptions.map((option) => (
+                        <label key={option.value} className="grid gap-1 text-sm font-medium">
+                          {option.value} stock
+                          <input
+                            type="number"
+                            min="0"
+                            value={option.inventory}
+                            onChange={(event) => updateOptionInventory(option.value, Math.max(0, Number(event.target.value) || 0))}
+                            className="h-10 rounded-lg border border-border bg-white px-3"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <p className="mt-1 text-xs text-muted">This product has no selectable options.</p>
+              )}
             </div>
 
             {/* Pricing */}
@@ -465,7 +544,7 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
             {/* Inventory */}
             <div>
               <label htmlFor="inventory" className="block text-sm font-medium mb-2">
-                Inventory Count *
+                {selectedOptions.length ? "Total Option Stock" : "Inventory Count *"}
               </label>
               <input
                 type="number"
@@ -474,8 +553,9 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
                 required
                 min="0"
                 value={formData.inventory}
+                readOnly={selectedOptions.length > 0}
                 onChange={handleInputChange}
-                className="w-full h-11 rounded-full border border-border bg-white px-4 text-sm outline-none focus:ring-4 focus:ring-brand/20"
+                className="w-full h-11 rounded-full border border-border bg-white px-4 text-sm outline-none focus:ring-4 focus:ring-brand/20 read-only:bg-background"
                 placeholder="100"
               />
             </div>

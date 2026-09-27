@@ -13,6 +13,7 @@ import { getAvailableInventoryById } from "@/lib/inventory-storage";
 import { formatCents } from "@/lib/money";
 import { getReviewSummary } from "@/lib/review-storage";
 import { getWishlistProductIds, removeFromWishlist, WISHLIST_UPDATED_EVENT } from "@/lib/wishlist-storage";
+import { getProductOptionType, getProductOptionTypeLabel, getProductOptions } from "@/lib/product-options";
 
 export function WishlistPage() {
   const router = useRouter();
@@ -48,9 +49,11 @@ export function WishlistPage() {
         ) : (
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {products.map((product) => {
-              const available = getAvailableInventoryById(product.id, product.inventory);
+              const available = getAvailableInventoryById(product);
               const summary = getReviewSummary(product.id);
               const outOfStock = available <= 0;
+              const options = getProductOptions(product);
+              const optionType = getProductOptionType(product);
               return (
                 <article key={product.id} className="overflow-hidden rounded-2xl border border-border bg-surface">
                   <Link href={`/products/${product.slug}`} className="relative block aspect-[4/3] bg-[#efe8dc]">
@@ -62,8 +65,8 @@ export function WishlistPage() {
                     <StarRating rating={summary.reviewCount ? summary.rating : product.rating} reviewCount={summary.reviewCount || product.reviewCount} />
                     <p className={`text-sm ${outOfStock ? "font-semibold text-red-600" : "text-muted"}`}>{outOfStock ? "Unavailable - Out of stock" : `${available} in stock`}</p>
                     <div className="flex flex-wrap gap-2 pt-2">
-                      <AddToCartButton productId={product.id} disabled={outOfStock || Boolean(product.sizes?.length)} />
-                      {product.sizes?.length ? <Link href={`/products/${product.slug}`} className="rounded-full border border-border px-4 py-2 text-sm font-semibold hover:border-brand">Choose size</Link> : null}
+                      <AddToCartButton productId={product.id} disabled={outOfStock || options.length > 0} requiresOption={options.length > 0} />
+                      {options.length ? <Link href={`/products/${product.slug}`} className="rounded-full border border-border px-4 py-2 text-sm font-semibold hover:border-brand">Choose {getProductOptionTypeLabel(optionType).toLowerCase()}</Link> : null}
                       <button type="button" onClick={() => removeFromWishlist(user.id, product.id)} className="rounded-full border border-border px-4 py-2 text-sm font-semibold hover:border-brand">Remove</button>
                     </div>
                   </div>

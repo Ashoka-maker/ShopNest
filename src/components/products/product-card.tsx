@@ -13,15 +13,20 @@ import { WishlistButton } from "@/components/products/wishlist-button";
 import { SellerBadge } from "@/components/seller/seller-badge";
 import { AddToCartButton } from "@/components/products/add-to-cart-button";
 import { BuyNowButton } from "@/components/products/buy-now-button";
+import { getProductOptionType, getProductOptionTypeLabel, getProductOptions } from "@/lib/product-options";
 
 type ProductCardProps = {
   product: Product;
 };
 
 export function ProductCard({ product }: ProductCardProps) {
-  const availableInventory = getAvailableInventoryById(product.id, product.inventory);
+  const availableInventory = getAvailableInventoryById(product);
+  const options = getProductOptions(product);
+  const optionType = getProductOptionType(product);
   const off = discountPercent(product.priceCents, product.compareAtPriceCents);
   const category = CATEGORIES.find((item) => item.slug === product.category);
+  const [selectedOptionValue, setSelectedOptionValue] = useState("");
+  const selectedOption = options.find((option) => option.value === selectedOptionValue);
   const [reviewSummary, setReviewSummary] = useState(() => getReviewSummary(product.id));
   useEffect(() => {
     const refresh = () => setReviewSummary(getReviewSummary(product.id));
@@ -79,9 +84,27 @@ export function ProductCard({ product }: ProductCardProps) {
             </span>
           ) : null}
         </div>
+        {options.length ? (
+          <label className="mt-2 grid gap-1 text-xs font-medium text-muted">
+            {getProductOptionTypeLabel(optionType)}
+            <select
+              value={selectedOptionValue}
+              onChange={(event) => setSelectedOptionValue(event.target.value)}
+              aria-label={`Select ${getProductOptionTypeLabel(optionType)} for ${product.name}`}
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+            >
+              <option value="">Select {getProductOptionTypeLabel(optionType).toLowerCase()}</option>
+              {options.map((option) => (
+                <option key={option.value} value={option.value} disabled={option.inventory <= 0}>
+                  {option.value}{option.inventory <= 0 ? " (Out of stock)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <div className="mt-2 grid grid-cols-2 gap-2">
-          <AddToCartButton productId={product.id} disabled={availableInventory <= 0} />
-          <BuyNowButton productId={product.id} sizes={product.sizes} disabled={availableInventory <= 0} />
+          <AddToCartButton productId={product.id} size={selectedOption?.value} variantId={selectedOption?.variantId} requiresOption={options.length > 0} disabled={availableInventory <= 0 || Boolean(selectedOption && selectedOption.inventory <= 0)} />
+          <BuyNowButton productId={product.id} size={selectedOption?.value} variantId={selectedOption?.variantId} requiresOption={options.length > 0} disabled={availableInventory <= 0 || Boolean(selectedOption && selectedOption.inventory <= 0)} />
         </div>
       </div>
     </article>

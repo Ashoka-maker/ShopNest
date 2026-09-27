@@ -21,6 +21,7 @@ import {
   type ReturnRequest,
 } from "@/types/return-request";
 import type { ProductSize } from "@/types/product";
+import { getProductOptionType, getProductOptionTypeLabel } from "@/lib/product-options";
 
 export function CustomerOrdersPage() {
   const router = useRouter();
@@ -110,7 +111,7 @@ export function CustomerOrdersPage() {
                     const request = returnRequests.find((candidate) => requestKey(candidate.orderId, candidate.productId, candidate.size) === itemKey);
                     return (
                       <div key={`${item.productId}-${item.size ?? "default"}`} className="rounded-lg border border-border p-3">
-                        <p className="text-sm">{product?.name || item.productId} × {item.quantity}{item.size ? ` (Size: ${item.size})` : ""}</p>
+                        <p className="text-sm">{product?.name || item.productId} × {item.quantity}{item.size ? ` (${product ? getProductOptionTypeLabel(getProductOptionType(product)) : "Option"}: ${item.size})` : ""}</p>
                         {request ? (
                           <div className="mt-2 text-xs">
                             <p className="font-semibold text-brand">Return status: {getReturnRequestStatusLabel(request.status)}</p>

@@ -5,6 +5,7 @@ import {
   saveSellerProduct,
 } from "@/lib/seller-storage";
 import type { Product, ProductSize } from "@/types/product";
+import { getProductOptions } from "@/lib/product-options";
 
 const INVENTORY_OVERRIDES_KEY = "shopnest_inventory_overrides";
 
@@ -23,7 +24,12 @@ function saveOverrides(overrides: InventoryOverride) {
   localStorage.setItem(INVENTORY_OVERRIDES_KEY, JSON.stringify(overrides));
 }
 
-export function getAvailableInventory(product: Pick<Product, "id" | "inventory" | "sizes" | "inventoryBySize">): number {
+type ProductInventory = Pick<Product, "id" | "inventory" | "options" | "sizes" | "inventoryBySize">;
+
+export function getAvailableInventory(product: ProductInventory): number {
+  if (product.options?.length) {
+    return product.options.reduce((total, option) => total + Math.max(0, option.inventory), 0);
+  }
   if (product.inventoryBySize && Object.keys(product.inventoryBySize).length > 0) {
     return Object.values(product.inventoryBySize).reduce((total, quantity) => total + Math.max(0, quantity ?? 0), 0);
   }
@@ -33,10 +39,10 @@ export function getAvailableInventory(product: Pick<Product, "id" | "inventory" 
   return Math.max(0, product.inventory);
 }
 
-export function getAvailableInventoryById(product: Pick<Product, "id" | "inventory" | "sizes" | "inventoryBySize">): number;
+export function getAvailableInventoryById(product: ProductInventory): number;
 export function getAvailableInventoryById(productId: string, fallback: number): number;
 export function getAvailableInventoryById(
-  productOrId: Pick<Product, "id" | "inventory" | "sizes" | "inventoryBySize"> | string,
+  productOrId: ProductInventory | string,
   fallback?: number,
 ): number {
   if (typeof productOrId === "string") {
@@ -46,9 +52,11 @@ export function getAvailableInventoryById(
 }
 
 export function getAvailableInventoryForSize(
-  product: Pick<Product, "inventoryBySize">,
+  product: Pick<Product, "options" | "inventoryBySize">,
   size: ProductSize,
 ): number {
+  const option = product.options?.find((candidate) => candidate.value.toLowerCase() === size.toLowerCase());
+  if (option) return Math.max(0, option.inventory);
   return Math.max(0, product.inventoryBySize?.[size] ?? 0);
 }
 
@@ -84,9 +92,14 @@ function updateSizeInventory(productId: string, size: ProductSize, quantity: num
   const product = getAllProducts().find((candidate) => candidate.id === productId);
   const sellerProduct = getSellerProductById(productId);
   if (!product || !sellerProduct) return false;
-  const inventoryBySize = { ...(sellerProduct.inventoryBySize || {}), [size]: Math.max(0, Math.floor(quantity)) };
+  const options = getProductOptions(sellerProduct).map((option) => (
+    option.value.toLowerCase() === size.toLowerCase()
+      ? { ...option, inventory: Math.max(0, Math.floor(quantity)) }
+      : option
+  ));
+  const inventoryBySize = Object.fromEntries(options.map((option) => [option.value, option.inventory]));
   const inventory = Object.values(inventoryBySize).reduce((total, value) => total + (value || 0), 0);
-  return saveSellerProduct({ ...sellerProduct, inventoryBySize, inventory });
+  return saveSellerProduct({ ...sellerProduct, options, sizes: options.map((option) => option.value), inventoryBySize, inventory });
 }
 
 export function reduceInventoryForOrder(order: Order): boolean {

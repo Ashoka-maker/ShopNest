@@ -7,7 +7,7 @@ type EmailRequest = {
   orderId: string;
   customerEmail: string;
   customerName: string;
-  items: Array<{ name: string; quantity: number; size?: string; priceCents: number }>;
+  items: Array<{ name: string; quantity: number; size?: string; optionLabel?: string; priceCents: number }>;
   totalCents: number;
   shippingAddress: {
     fullName: string;
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
   const itemRows = body.items
     .map(
       (item) =>
-        `<li>${escapeHtml(item.name)}${item.size ? ` (Size: ${escapeHtml(item.size)})` : ""} × ${item.quantity} — ₹${(item.priceCents / 100).toLocaleString("en-IN")}</li>`,
+        `<li>${escapeHtml(item.name)}${item.size ? ` (${escapeHtml(item.optionLabel || "Size")}: ${escapeHtml(item.size)})` : ""} × ${item.quantity} — ₹${(item.priceCents / 100).toLocaleString("en-IN")}</li>`,
     )
     .join("");
   const address = body.shippingAddress;

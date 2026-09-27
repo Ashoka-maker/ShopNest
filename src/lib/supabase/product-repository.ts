@@ -3,13 +3,17 @@ import type {
   Product,
   ProductCategorySlug,
   ProductFormData,
+  ProductOptionType,
+  ProductOptionValue,
   ProductSize,
   SizeInventory,
 } from "@/types/product";
+import { getProductOptions } from "@/lib/product-options";
 
 export type ProductVariant = {
   id: string;
   productId: string;
+  value: ProductOptionValue;
   size?: ProductSize;
   color?: string;
   sku?: string;
@@ -37,6 +41,7 @@ type ProductWrite = {
   image_url: string | null;
   gallery: string[];
   inventory: number;
+  option_type: ProductOptionType;
   approval_status?: Product["approvalStatus"];
   publish_status?: Product["publishStatus"];
 };
@@ -76,6 +81,7 @@ type ProductRow = {
   review_count: number;
   approval_status: Product["approvalStatus"];
   publish_status: Product["publishStatus"];
+  option_type?: ProductOptionType | null;
   created_at?: string;
   updated_at?: string;
   categories?: CategoryRow | CategoryRow[] | null;
@@ -120,12 +126,17 @@ function firstRelation<T>(relation: T | T[] | null | undefined): T | null {
 function toProduct(row: ProductRow, variants: ProductVariant[] = [], publicSeller?: PublicSellerRow | null): Product {
   const category = firstRelation(row.categories);
   const seller = publicSeller ?? firstRelation(row.sellers);
-  const sizedVariants = variants.filter((variant) => variant.size);
-  const inventoryBySize: SizeInventory = {};
-
-  for (const variant of sizedVariants) {
-    if (variant.size) inventoryBySize[variant.size] = variant.inventory;
-  }
+  const optionType = row.option_type ?? (variants.some((variant) => variant.size) ? "size" : variants.some((variant) => variant.color) ? "color" : "none");
+  const optionVariants = optionType === "none" ? [] : optionType === "color" ? variants : variants.filter((variant) => variant.size);
+  const options = getProductOptions({
+    options: optionVariants.filter((variant) => variant.value).map((variant) => ({
+      value: variant.value,
+      inventory: variant.inventory,
+      variantId: variant.id,
+    })),
+  });
+  const configuredOptions = optionType === "none" ? [] : options;
+  const inventoryBySize = Object.fromEntries(configuredOptions.map((option) => [option.value, option.inventory])) as SizeInventory;
 
   return {
     id: row.id,
@@ -143,8 +154,10 @@ function toProduct(row: ProductRow, variants: ProductVariant[] = [], publicSelle
     inventory: row.inventory,
     rating: Number(row.rating ?? 0),
     reviewCount: row.review_count ?? 0,
-    sizes: sizedVariants.length ? sizedVariants.flatMap((variant) => variant.size ? [variant.size] : []) : undefined,
-    inventoryBySize: sizedVariants.length ? inventoryBySize : undefined,
+    optionType,
+    options: configuredOptions,
+    sizes: configuredOptions.map((option) => option.value),
+    inventoryBySize: Object.keys(inventoryBySize).length ? inventoryBySize : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     approvalStatus: row.approval_status,
@@ -153,15 +166,15 @@ function toProduct(row: ProductRow, variants: ProductVariant[] = [], publicSelle
 }
 
 function toVariant(row: VariantRow): ProductVariant {
-  const size = CATEGORY_SLUGS.length > 0 && ["S", "M", "L", "XL", "XXL"].includes(row.size ?? "")
-    ? (row.size as ProductSize)
-    : undefined;
+  const size = row.size?.trim() || undefined;
+  const color = row.color?.trim() || undefined;
 
   return {
     id: row.id,
     productId: row.product_id,
     size,
-    color: row.color ?? undefined,
+    color,
+    value: size ?? color ?? "",
     sku: row.sku ?? undefined,
     inventory: row.inventory,
     createdAt: row.created_at,
@@ -174,7 +187,8 @@ async function variantsForProduct(productId: string): Promise<ProductVariant[]> 
     .from("product_variants")
     .select("*")
     .eq("product_id", productId)
-    .order("size");
+      .order("size")
+      .order("inventory", { ascending: false });
 
   if (error) throw error;
   return ((data ?? []) as unknown as VariantRow[]).map(toVariant);
@@ -450,10 +464,9 @@ async function categoryIdForSlug(slug: ProductCategorySlug): Promise<string> {
 }
 
 function productWrite(input: ProductFormData, sellerId: string | null, slug: string, approvalStatus: Product["approvalStatus"], publishStatus: Product["publishStatus"]): ProductWrite {
-  const variantInventory = input.sizes.reduce(
-    (total, size) => total + Math.max(0, Math.floor(input.inventoryBySize?.[size] ?? 0)),
-    0,
-  );
+  const optionType = input.optionType ?? (input.sizes.length > 0 ? "size" : "none");
+  const options = optionType === "none" ? [] : getProductOptions(input);
+  const variantInventory = options.reduce((total, option) => total + option.inventory, 0);
 
   return {
     seller_id: sellerId,
@@ -466,38 +479,72 @@ function productWrite(input: ProductFormData, sellerId: string | null, slug: str
     compare_at_price_cents: input.compareAtPriceCents,
     image_url: input.imageUrl?.trim() || null,
     gallery: [],
-    inventory: input.sizes.length > 0 ? variantInventory : Math.max(0, Math.floor(input.inventory)),
+    inventory: options.length > 0 ? variantInventory : Math.max(0, Math.floor(input.inventory)),
+    option_type: optionType,
     approval_status: approvalStatus,
     publish_status: publishStatus,
   };
 }
 
 function variantWrites(productId: string, input: ProductFormData) {
-  return input.sizes.map((size) => ({
+  const optionType = input.optionType ?? (input.sizes.length > 0 ? "size" : "none");
+  const options = optionType === "none" ? [] : getProductOptions(input);
+  return options.map((option) => ({
     product_id: productId,
-    size,
-    color: null,
+    size: option.value,
+    color: "",
     sku: null,
-    inventory: Math.max(0, Math.floor(input.inventoryBySize?.[size] ?? 0)),
+    inventory: option.inventory,
   }));
 }
 
 async function syncProductVariants(productId: string, input: ProductFormData) {
   const supabase = createClient();
   const variants = variantWrites(productId, input);
-  if (variants.length) {
-    const { error } = await supabase
-      .from("product_variants")
-      .upsert(variants, { onConflict: "product_id,size,color" });
-    if (error) throw error;
+  const { data, error: readError } = await supabase
+    .from("product_variants")
+    .select("id, size, color, inventory")
+    .eq("product_id", productId);
+  if (readError) throw readError;
+
+  const existing = (data ?? []) as Array<{ id: string; size: string | null; color: string | null; inventory: number }>;
+  const optionKey = (value: string | null) => value?.trim().toLocaleLowerCase() ?? "";
+  const desiredValues = new Set(variants.map((variant) => optionKey(variant.size)));
+
+  for (const variant of variants) {
+    const key = optionKey(variant.size);
+    const matches = existing
+      .filter((item) => optionKey(item.size || item.color) === key)
+      .sort((left, right) => right.inventory - left.inventory);
+
+    if (matches.length) {
+      const [canonical, ...duplicates] = matches;
+      const { error: updateError } = await supabase
+        .from("product_variants")
+        .update(variant)
+        .eq("id", canonical.id);
+      if (updateError) throw updateError;
+
+      for (const duplicate of duplicates) {
+        const { error: duplicateError } = await supabase
+          .from("product_variants")
+          .update({ inventory: 0 })
+          .eq("id", duplicate.id);
+        if (duplicateError) throw duplicateError;
+      }
+    } else {
+      const { error: insertError } = await supabase.from("product_variants").insert(variant);
+      if (insertError) throw insertError;
+    }
   }
 
-  const sizes = input.sizes.map((size) => `"${size}"`).join(",");
-  const query = supabase.from("product_variants").delete().eq("product_id", productId);
-  const { error } = input.sizes.length
-    ? await query.not("size", "in", `(${sizes})`)
-    : await query;
-  if (error) throw error;
+  const staleIds = existing
+    .filter((variant) => !desiredValues.has(optionKey(variant.size || variant.color)))
+    .map((variant) => variant.id);
+  if (staleIds.length) {
+    const { error: deleteError } = await supabase.from("product_variants").delete().in("id", staleIds);
+    if (deleteError) throw deleteError;
+  }
 }
 
 export async function createSellerProductInSupabase(
@@ -543,12 +590,8 @@ export async function createAdminProductInSupabase(input: ProductFormData) {
   const { data, error } = await supabase.from("products").insert(row).select(PRODUCT_SELECT).single();
   if (error) throw error;
   const product = data as unknown as ProductRow;
-  const variants = variantWrites(product.id, input);
-  if (variants.length) {
-    const { error: variantError } = await supabase.from("product_variants").insert(variants);
-    if (variantError) throw variantError;
-  }
-  return toProduct(product);
+  await syncProductVariants(product.id, input);
+  return toProduct(product, await variantsForProduct(product.id));
 }
 
 export async function updateSellerProductInSupabase(
@@ -575,6 +618,7 @@ export async function updateSellerProductInSupabase(
       image_url: row.image_url,
       gallery: row.gallery,
       inventory: row.inventory,
+      option_type: row.option_type,
     })
     .eq("id", productId)
     .select(PRODUCT_SELECT)
@@ -603,19 +647,15 @@ export async function updateAdminProductInSupabase(product: Product, input: Prod
       image_url: row.image_url,
       gallery: row.gallery,
       inventory: row.inventory,
+      option_type: row.option_type,
     })
     .eq("id", product.id)
     .select(PRODUCT_SELECT)
     .single();
   if (error) throw error;
 
-  const { error: deleteVariantsError } = await supabase.from("product_variants").delete().eq("product_id", product.id);
-  if (deleteVariantsError) throw deleteVariantsError;
-  const variants = variantWrites(product.id, input);
-  if (variants.length) {
-    const { error: variantError } = await supabase.from("product_variants").insert(variants);
-    if (variantError) throw variantError;
-  }
+    await syncProductVariants(product.id, input);
+    return toProduct(data as unknown as ProductRow, await variantsForProduct(product.id));
   return toProduct(data as unknown as ProductRow);
 }
 
@@ -662,7 +702,7 @@ export async function reserveOrderInventory(
   const variantByProductAndSize = new Map<string, string>();
   for (const item of items.filter((entry) => entry.size)) {
     const variants = await variantsForProduct(item.productId);
-    const variant = variants.find((candidate) => candidate.size === item.size);
+    const variant = variants.find((candidate) => candidate.value.toLowerCase() === item.size?.toLowerCase());
     if (!variant) return false;
     variantByProductAndSize.set(`${item.productId}:${item.size}`, variant.id);
   }

@@ -9,6 +9,7 @@ import {
   updateOrderStatus,
 } from "@/lib/order-storage";
 import { ORDER_STATUS_OPTIONS, getOrderStatusLabel, type Order, type OrderStatus } from "@/types/order";
+import { getProductOptionType, getProductOptionTypeLabel } from "@/lib/product-options";
 
 const statusOptions = ORDER_STATUS_OPTIONS.filter((status) => status !== "pending");
 
@@ -54,7 +55,7 @@ export function SellerOrdersSection({ sellerId }: { sellerId: string }) {
                 <div><p className="text-muted">Customer</p><p>{order.shippingAddress.fullName}</p></div>
                 <div><p className="text-muted">Date</p><p>{new Date(order.createdAt).toLocaleDateString()}</p></div>
                 <div><p className="text-muted">Product</p><p>{product?.name || item.productId}</p></div>
-                <div><p className="text-muted">Quantity / Size</p><p>{item.quantity}{item.size ? ` / ${item.size}` : ""}</p></div>
+                <div><p className="text-muted">Quantity / {product ? getProductOptionTypeLabel(getProductOptionType(product)) : "Option"}</p><p>{item.quantity}{item.size ? ` / ${item.size}` : ""}</p></div>
                 <div><p className="text-muted">Amount</p><p className="font-semibold">{formatCents(item.priceCents * item.quantity)}</p></div>
                 <div><p className="text-muted">Payment</p><p>{order.paymentMethod === "cod" ? "Cash on Delivery" : "UPI Payment"}</p></div>
                 <div className="md:col-span-2"><p className="text-muted">Shipping address</p><p>{order.shippingAddress.address}, {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.pincode}</p></div>

@@ -1,5 +1,6 @@
 import type { Seller } from "@/types/seller";
 import type { SellerProduct, ProductFormData } from "@/types/product";
+import { getProductOptions } from "@/lib/product-options";
 
 const SELLERS_STORAGE_KEY = "shopnest_sellers";
 const SELLER_PRODUCTS_STORAGE_KEY = "shopnest_seller_products";
@@ -167,11 +168,14 @@ export function createSellerProductFromData(
   const id = generateProductId();
   const slug = generateSlug(data.name);
   const now = new Date().toISOString();
+  const optionType = data.optionType ?? (data.sizes.length > 0 ? "size" : "none");
+  const options = optionType === "none" ? [] : getProductOptions(data);
+  const inventoryBySize = Object.fromEntries(options.map((option) => [option.value, option.inventory]));
   
   const imageUrl = data.imageUrl || `https://picsum.photos/seed/${slug}/1200/900`;
   const gallery = [`https://picsum.photos/seed/${slug}-gallery/1200/900`];
-  const inventory = data.sizes.length > 0
-    ? data.sizes.reduce((total, size) => total + Math.max(0, Math.floor(data.inventoryBySize?.[size] ?? 0)), 0)
+  const inventory = options.length
+    ? options.reduce((total, option) => total + option.inventory, 0)
     : Math.max(0, Math.floor(data.inventory));
   
   return {
@@ -192,8 +196,10 @@ export function createSellerProductFromData(
     updatedAt: now,
     approvalStatus: "pending",
     publishStatus: "unpublished",
-    sizes: data.sizes,
-    inventoryBySize: data.inventoryBySize,
+    optionType,
+    options,
+    sizes: options.map((option) => option.value),
+    inventoryBySize,
   };
 }
 
@@ -202,8 +208,11 @@ export function updateSellerProductFromData(
   data: ProductFormData
 ): SellerProduct {
   const now = new Date().toISOString();
-  const inventory = data.sizes.length > 0
-    ? data.sizes.reduce((total, size) => total + Math.max(0, Math.floor(data.inventoryBySize?.[size] ?? 0)), 0)
+  const optionType = data.optionType ?? (data.sizes.length > 0 ? "size" : "none");
+  const options = optionType === "none" ? [] : getProductOptions(data);
+  const inventoryBySize = Object.fromEntries(options.map((option) => [option.value, option.inventory]));
+  const inventory = options.length
+    ? options.reduce((total, option) => total + option.inventory, 0)
     : Math.max(0, Math.floor(data.inventory));
   
   return {
@@ -216,8 +225,10 @@ export function updateSellerProductFromData(
     category: data.category,
     inventory,
     imageUrl: data.imageUrl || existingProduct.imageUrl,
-    sizes: data.sizes,
-    inventoryBySize: data.inventoryBySize,
+    optionType,
+    options,
+    sizes: options.map((option) => option.value),
+    inventoryBySize,
     updatedAt: now,
   };
 }

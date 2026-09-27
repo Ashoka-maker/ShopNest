@@ -145,8 +145,7 @@ export default function ProductDetailsPage() {
             productId={product.id}
             categorySlug={product.category}
             categoryName={category?.name || ""}
-            inventory={getAvailableInventoryById(product.id, product.inventory)}
-            sizes={product.sizes}
+            product={product}
           />
         </div>
       </div>

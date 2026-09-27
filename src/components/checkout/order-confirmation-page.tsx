@@ -9,6 +9,7 @@ import { getAllProducts } from "@/features/products/data";
 import { formatCents } from "@/lib/money";
 import { getOrderById } from "@/lib/order-storage";
 import type { Order } from "@/types/order";
+import { getProductOptionType, getProductOptionTypeLabel } from "@/lib/product-options";
 
 export function OrderConfirmationPage({
   searchParams,
@@ -184,7 +185,7 @@ export function OrderConfirmationPage({
                   <div className="flex flex-1 flex-col">
                     <p className="font-semibold">{product.name}</p>
                     <p className="text-sm text-muted">Qty: {item.quantity}</p>
-                    {item.size ? <p className="text-sm text-muted">Size: {item.size}</p> : null}
+                    {item.size ? <p className="text-sm text-muted">{getProductOptionTypeLabel(getProductOptionType(product))}: {item.size}</p> : null}
                     <p className="mt-auto font-semibold">
                       {formatCents(item.priceCents * item.quantity)}
                     </p>

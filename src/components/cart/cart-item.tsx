@@ -7,7 +7,8 @@ import { useCart } from "@/lib/cart-context";
 import { getAllProducts } from "@/features/products/data";
 import { formatCents } from "@/lib/money";
 import type { CartItem } from "@/types/cart";
-import { getAvailableInventory } from "@/lib/inventory-storage";
+import { getAvailableInventory, getAvailableInventoryForSize } from "@/lib/inventory-storage";
+import { getProductOptionType, getProductOptionTypeLabel } from "@/lib/product-options";
 
 type CartItemProps = {
   item: CartItem;
@@ -20,7 +21,9 @@ export function CartItem({ item }: CartItemProps) {
   if (!product) {
     return null;
   }
-  const availableInventory = getAvailableInventory(product);
+  const availableInventory = item.size
+    ? getAvailableInventoryForSize(product, item.size)
+    : getAvailableInventory(product);
 
   const handleQuantityChange = (newQuantity: number) => {
     if (newQuantity < 1) {
@@ -58,7 +61,7 @@ export function CartItem({ item }: CartItemProps) {
             {product.name}
           </Link>
           <p className="text-sm text-muted">{product.sellerName}</p>
-          {item.size ? <p className="text-sm text-muted">Size: {item.size}</p> : null}
+          {item.size ? <p className="text-sm text-muted">{getProductOptionTypeLabel(getProductOptionType(product))}: {item.size}</p> : null}
           <p className="mt-1 font-semibold">{formatCents(product.priceCents)}</p>
         </div>
 

@@ -13,6 +13,7 @@ import type { Order } from "@/types/order";
 import { ORDER_STATUS_OPTIONS, getOrderStatusLabel } from "@/types/order";
 import { getAllProducts } from "@/features/products/data";
 import { ORDERS_UPDATED_EVENT } from "@/lib/order-storage";
+import { getProductOptionType, getProductOptionTypeLabel } from "@/lib/product-options";
 
 export function AdminOrdersPage() {
   const router = useRouter();
@@ -169,7 +170,7 @@ export function AdminOrdersPage() {
                             const product = getAllProducts().find((candidate) => candidate.id === item.productId);
                             return (
                               <p key={`${item.productId}-${item.size ?? "default"}`}>
-                                {product?.name || item.productId} x {item.quantity}{item.size ? ` (${item.size})` : ""}
+                                {product?.name || item.productId} x {item.quantity}{item.size ? ` (${product ? getProductOptionTypeLabel(getProductOptionType(product)) : "Option"}: ${item.size})` : ""}
                               </p>
                             );
                           })}

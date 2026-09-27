@@ -1,9 +1,10 @@
-import type { ProductSize } from "./product";
+import type { ProductOptionValue } from "./product";
 
 export type CartItem = {
   productId: string;
   quantity: number;
-  size?: ProductSize;
+  size?: ProductOptionValue;
+  variantId?: string;
 };
 
 export type Cart = {

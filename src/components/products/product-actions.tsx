@@ -4,51 +4,56 @@ import { useState } from "react";
 import { AddToCartButton } from "./add-to-cart-button";
 import { buttonClassName } from "@/components/ui/button";
 import Link from "next/link";
-import type { ProductSize } from "@/types/product";
-import { getAvailableInventoryById, getAvailableInventoryForSize } from "@/lib/inventory-storage";
-import { getAllProducts } from "@/features/products/data";
+import type { Product } from "@/types/product";
+import { getAvailableInventory } from "@/lib/inventory-storage";
+import { getProductOptionType, getProductOptionTypeLabel, getProductOptions } from "@/lib/product-options";
 
 type ProductActionsProps = {
   productId: string;
   categorySlug: string;
   categoryName: string;
-  inventory: number;
-  sizes?: ProductSize[];
+  product: Product;
 };
 
 export function ProductActions({
   productId,
   categorySlug,
   categoryName,
-  inventory,
-  sizes = [],
+  product,
 }: ProductActionsProps) {
-  const [selectedSize, setSelectedSize] = useState<ProductSize | "">("");
-  const availableInventory = getAvailableInventoryById(productId, inventory);
+  const [selectedOptionValue, setSelectedOptionValue] = useState("");
+  const options = getProductOptions(product);
+  const optionType = getProductOptionType(product);
+  const selectedOption = options.find((option) => option.value === selectedOptionValue);
+  const availableInventory = getAvailableInventory(product);
   const isOutOfStock = availableInventory <= 0;
-  const needsSize = sizes.length > 0;
-  const product = getAllProducts().find((item) => item.id === productId);
 
   return (
     <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-      {needsSize ? (
+      {options.length ? (
         <label className="flex items-center gap-2 text-sm">
-          <span className="font-medium">Size</span>
+          <span className="font-medium">{getProductOptionTypeLabel(optionType)}</span>
           <select
-            value={selectedSize}
-            onChange={(event) => setSelectedSize(event.target.value as ProductSize | "")}
+            value={selectedOptionValue}
+            onChange={(event) => setSelectedOptionValue(event.target.value)}
             className="h-11 rounded-full border border-border bg-white px-4"
-            aria-label="Select size"
+            aria-label={`Select ${getProductOptionTypeLabel(optionType)}`}
           >
-            <option value="">Select size</option>
-            {sizes.map((size) => <option key={size} value={size} disabled={product ? getAvailableInventoryForSize(product, size) <= 0 : false}>{size}{product && getAvailableInventoryForSize(product, size) <= 0 ? " (Out of stock)" : ""}</option>)}
+            <option value="">Select {getProductOptionTypeLabel(optionType).toLowerCase()}</option>
+            {options.map((option) => (
+              <option key={option.value} value={option.value} disabled={option.inventory <= 0}>
+                {option.value}{option.inventory <= 0 ? " (Out of stock)" : ""}
+              </option>
+            ))}
           </select>
         </label>
       ) : null}
       <AddToCartButton
         productId={productId}
-        size={selectedSize || undefined}
-        disabled={isOutOfStock || (needsSize && !selectedSize)}
+        size={selectedOption?.value}
+        variantId={selectedOption?.variantId}
+        requiresOption={options.length > 0}
+        disabled={isOutOfStock || Boolean(selectedOption && selectedOption.inventory <= 0)}
       />
       <Link href="/products" className={buttonClassName("secondary")}>
         Continue shopping

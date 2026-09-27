@@ -15,6 +15,7 @@ import { getAvailableInventory, getAvailableInventoryForSize, reduceInventoryFor
 import { markOrderInventoryAdjusted } from "@/lib/order-storage";
 import { incrementCouponUsage, validateCoupon } from "@/lib/coupon-storage";
 import type { Coupon } from "@/types/coupon";
+import { getProductOptionType, getProductOptionTypeLabel, getProductOptions } from "@/lib/product-options";
 
 async function sendConfirmationEmail(order: Order): Promise<boolean> {
   const response = await fetch("/api/order-confirmation-email", {
@@ -26,7 +27,13 @@ async function sendConfirmationEmail(order: Order): Promise<boolean> {
       customerName: order.shippingAddress.fullName,
       items: order.items.map((item) => {
         const product = getAllProducts().find((candidate) => candidate.id === item.productId);
-        return { name: product?.name || item.productId, quantity: item.quantity, size: item.size, priceCents: item.priceCents };
+        return {
+          name: product?.name || item.productId,
+          quantity: item.quantity,
+          size: item.size,
+          optionLabel: item.size && product ? getProductOptionTypeLabel(getProductOptionType(product)) : undefined,
+          priceCents: item.priceCents,
+        };
       }),
       totalCents: order.totalCents,
       shippingAddress: order.shippingAddress,
@@ -154,7 +161,7 @@ export function CheckoutPage() {
     const finalTotal = subtotal + deliveryCharge - finalDiscountCents;
     const unavailable = cart.items.find((item) => {
       const product = getAllProducts().find((candidate) => candidate.id === item.productId);
-      return !product || (item.size ? getAvailableInventoryForSize(product, item.size) < item.quantity : getAvailableInventory(product) < item.quantity);
+      return !product || (getProductOptions(product).length > 0 && !item.size) || (item.size ? getAvailableInventoryForSize(product, item.size) < item.quantity : getAvailableInventory(product) < item.quantity);
     });
     if (unavailable) {
       setPaymentMessage("One or more products no longer have enough stock. Please update your cart.");
@@ -403,7 +410,7 @@ export function CheckoutPage() {
                     <div className="flex flex-1 flex-col">
                       <p className="font-semibold text-sm">{product.name}</p>
                       <p className="text-xs text-muted">Qty: {item.quantity}</p>
-                      {item.size ? <p className="text-xs text-muted">Size: {item.size}</p> : null}
+                      {item.size ? <p className="text-xs text-muted">{getProductOptionTypeLabel(getProductOptionType(product))}: {item.size}</p> : null}
                       <p className="mt-auto font-semibold text-sm">
                         {formatCents(product.priceCents * item.quantity)}
                       </p>
