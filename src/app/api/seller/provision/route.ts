@@ -19,11 +19,50 @@ function validText(value: unknown): value is string {
   return typeof value === "string";
 }
 
+function logProvisioning(
+  event: string,
+  userId: string,
+  profileRole: string | null,
+  metadataRole: string | null,
+  details: Record<string, unknown> = {},
+) {
+  console.info("Seller provisioning:", {
+    event,
+    userId,
+    profileRole,
+    metadataRole,
+    ...details,
+  });
+}
+
+function logProvisioningError(
+  event: string,
+  userId: string,
+  profileRole: string | null,
+  metadataRole: string | null,
+  error: { code?: string; message?: string },
+) {
+  console.error("Seller provisioning failed:", {
+    event,
+    userId,
+    profileRole,
+    metadataRole,
+    error: {
+      code: error.code ?? null,
+      message: error.message ?? "Supabase request failed",
+    },
+  });
+}
+
 export async function POST(request: Request) {
   const supabase = await getSupabaseServerClient();
   const { data: authData, error: authError } = await supabase.auth.getUser();
 
   if (authError || !authData.user) {
+    console.error("Seller provisioning authentication failed:", {
+      code: authError?.code ?? null,
+      message: authError?.message ?? "Authentication is required",
+    });
     return NextResponse.json(
       { error: authError ? supabaseError(authError) : { message: "Authentication is required" } },
       { status: 401 },
@@ -49,6 +88,9 @@ export async function POST(request: Request) {
   }
 
   const admin = await getSupabaseAdminClient();
+  const metadataRole = typeof authData.user.user_metadata?.role === "string"
+    ? authData.user.user_metadata.role
+    : null;
   const [{ data: existingProfile, error: profileLookupError }, { data: existingSeller, error: sellerLookupError }] =
     await Promise.all([
       admin
@@ -63,22 +105,28 @@ export async function POST(request: Request) {
         .maybeSingle(),
     ]);
 
+  const profileRole = typeof existingProfile?.role === "string" ? existingProfile.role : null;
+  logProvisioning("seller lookup completed", authData.user.id, profileRole, metadataRole, {
+    profileFound: Boolean(existingProfile),
+    sellerFound: Boolean(existingSeller),
+    sellerId: existingSeller?.id ?? null,
+  });
+
   if (profileLookupError) {
+    logProvisioningError("profile lookup", authData.user.id, profileRole, metadataRole, profileLookupError);
     return NextResponse.json({ error: supabaseError(profileLookupError) }, { status: 500 });
   }
   if (sellerLookupError) {
+    logProvisioningError("seller lookup", authData.user.id, profileRole, metadataRole, sellerLookupError);
     return NextResponse.json({ error: supabaseError(sellerLookupError) }, { status: 500 });
   }
 
-  const metadataRole = authData.user.user_metadata?.role;
-  if (metadataRole === "admin" || existingProfile?.role === "admin") {
+  if (metadataRole === "admin" || profileRole === "admin") {
+    logProvisioning("administrator provisioning rejected", authData.user.id, profileRole, metadataRole);
     return NextResponse.json({ error: { message: "Administrator accounts cannot be provisioned as sellers" } }, { status: 403 });
   }
-  if (metadataRole !== "seller" && existingProfile?.role !== "seller") {
-    return NextResponse.json({ error: { message: "A seller-authenticated account is required" } }, { status: 403 });
-  }
 
-  if (existingProfile?.role !== "seller") {
+  if (profileRole !== "seller") {
     const { error: profileError } = await admin.from("profiles").upsert({
       id: authData.user.id,
       email: existingProfile?.email ?? authData.user.email,
@@ -88,11 +136,15 @@ export async function POST(request: Request) {
     });
 
     if (profileError) {
+      logProvisioningError("profile role upsert", authData.user.id, profileRole, metadataRole, profileError);
       return NextResponse.json({ error: supabaseError(profileError) }, { status: 500 });
     }
   }
 
   if (existingSeller) {
+    logProvisioning("existing seller returned", authData.user.id, profileRole, metadataRole, {
+      sellerId: existingSeller.id,
+    });
     return NextResponse.json({ sellerId: existingSeller.id });
   }
 
@@ -102,6 +154,7 @@ export async function POST(request: Request) {
   const storeName = (body.storeName as string | undefined)?.trim()
     || (validText(metadataStoreName) ? metadataStoreName.trim() : "")
     || existingProfile?.full_name?.trim()
+    || (validText(authData.user.user_metadata?.full_name) ? authData.user.user_metadata.full_name.trim() : "")
     || emailPrefix
     || "ShopNest Store";
   const bio = (body.bio as string | undefined)?.trim()
@@ -128,12 +181,22 @@ export async function POST(request: Request) {
         .eq("user_id", authData.user.id)
         .maybeSingle();
       if (concurrentLookupError) {
+        logProvisioningError("concurrent seller lookup", authData.user.id, profileRole, metadataRole, concurrentLookupError);
         return NextResponse.json({ error: supabaseError(concurrentLookupError) }, { status: 500 });
       }
-      if (concurrentSeller) return NextResponse.json({ sellerId: concurrentSeller.id });
+      if (concurrentSeller) {
+        logProvisioning("concurrent seller returned", authData.user.id, profileRole, metadataRole, {
+          sellerId: concurrentSeller.id,
+        });
+        return NextResponse.json({ sellerId: concurrentSeller.id });
+      }
     }
+    logProvisioningError("seller insert", authData.user.id, profileRole, metadataRole, sellerError);
     return NextResponse.json({ error: supabaseError(sellerError) }, { status: 500 });
   }
 
+  logProvisioning("seller created", authData.user.id, profileRole, metadataRole, {
+    sellerId: seller.id,
+  });
   return NextResponse.json({ sellerId: seller.id });
 }

@@ -10,6 +10,7 @@ import {
   getSellerByUserId, 
   getSellerProductById, 
   saveSellerProduct,
+  updateSeller,
   createSellerProductFromData,
   updateSellerProductFromData 
 } from "@/lib/seller-storage";
@@ -21,7 +22,6 @@ import { getDataSourceMode } from "@/lib/adapters/config";
 import {
   createSellerProductInSupabase,
   ensureSellerInSupabase,
-  getSellerIdForUser,
   getSellerProductsFromSupabase,
   updateSellerProductInSupabase,
 } from "@/lib/supabase/product-repository";
@@ -76,7 +76,10 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
       let remoteProduct: Product | null = null;
       if (useSupabase) {
         try {
-          const remoteSellerId = sellerData.supabaseSellerId ?? await ensureSellerInSupabase(user.id, sellerData.storeName, sellerData.bio);
+          const remoteSellerId = await ensureSellerInSupabase(user.id, sellerData.storeName, sellerData.bio);
+          if (remoteSellerId !== sellerData.supabaseSellerId) {
+            updateSeller(user.id, { supabaseSellerId: remoteSellerId });
+          }
           setSupabaseSellerId(remoteSellerId);
           if (remoteSellerId && mode === "edit") {
             const remoteProducts = await getSellerProductsFromSupabase(remoteSellerId);
