@@ -46,7 +46,7 @@ async function sendConfirmationEmail(order: Order): Promise<boolean> {
 export function CheckoutPage() {
   const router = useRouter();
   const { cart, clearCart } = useCart();
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [locationMessage, setLocationMessage] = useState("");
   const [emailMessage, setEmailMessage] = useState("");
@@ -58,6 +58,13 @@ export function CheckoutPage() {
   const [couponDiscountCents, setCouponDiscountCents] = useState(0);
   const [couponMessage, setCouponMessage] = useState("");
   const [customerEmail, setCustomerEmail] = useState(user?.email || "");
+
+  useEffect(() => {
+    const useSupabase = getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid";
+    if (!isAuthLoading && !user && useSupabase) {
+      router.replace("/signin");
+    }
+  }, [isAuthLoading, router, user]);
 
   useEffect(() => {
     if (user?.email && !customerEmail) setCustomerEmail(user.email);
@@ -148,6 +155,11 @@ export function CheckoutPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    const useSupabase = getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid";
+    if (!user && useSupabase) {
+      router.replace("/signin");
+      return;
+    }
     setEmailMessage("");
     setPaymentMessage("");
     setIsSubmitting(true);

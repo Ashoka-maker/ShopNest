@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { createClient, createPublicClient } from "@/lib/supabase/client";
 import type {
   Product,
   ProductCategorySlug,
@@ -107,7 +107,7 @@ const CATEGORY_SLUGS: ProductCategorySlug[] = [
   "groceries",
 ];
 const PRODUCT_SELECT = "*, categories:category_id(*), sellers:seller_id(id, store_name)";
-const PUBLIC_PRODUCT_SELECT = "*, categories:category_id(*)";
+const PUBLIC_PRODUCT_SELECT = "id, seller_id, category_id, slug, name, description, highlights, price_cents, compare_at_price_cents, image_url, gallery, inventory, rating, review_count, approval_status, publish_status, option_type, created_at, updated_at, categories:category_id(id, slug, name, description)";
 
 function normalizeCategorySlug(value: string | undefined): ProductCategorySlug | null {
   const normalizedValue = value?.trim().toLowerCase();
@@ -193,6 +193,21 @@ async function variantsForProduct(productId: string): Promise<ProductVariant[]> 
   return ((data ?? []) as unknown as VariantRow[]).map(toVariant);
 }
 
+async function publicVariantsForProduct(
+  productId: string,
+  supabase: ReturnType<typeof createPublicClient>,
+): Promise<ProductVariant[]> {
+  const { data, error } = await supabase
+    .from("product_variants")
+    .select("id, product_id, size, color, inventory, created_at")
+    .eq("product_id", productId)
+    .order("size")
+    .order("inventory", { ascending: false });
+
+  if (error) throw error;
+  return ((data ?? []) as unknown as VariantRow[]).map(toVariant);
+}
+
 async function productsQuery(query: PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<Product[]> {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
@@ -200,7 +215,10 @@ async function productsQuery(query: PromiseLike<{ data: unknown; error: { messag
   return Promise.all(rows.map(async (row) => toProduct(row, await variantsForProduct(row.id))));
 }
 
-async function publicProductsQuery(query: PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<Product[]> {
+async function publicProductsQuery(
+  query: PromiseLike<{ data: unknown; error: { message: string } | null }>,
+  supabase: ReturnType<typeof createPublicClient>,
+): Promise<Product[]> {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   const rows = (data as ProductRow[] | null ?? []);
@@ -208,7 +226,6 @@ async function publicProductsQuery(query: PromiseLike<{ data: unknown; error: { 
   const sellerById = new Map<string, PublicSellerRow>();
 
   if (sellerIds.length) {
-    const supabase = createClient();
     const { data: sellers, error: sellerError } = await supabase
       .from("public_sellers")
       .select("id, store_name")
@@ -222,13 +239,13 @@ async function publicProductsQuery(query: PromiseLike<{ data: unknown; error: { 
 
   return Promise.all(rows.map(async (row) => toProduct(
     row,
-    await variantsForProduct(row.id),
+    await publicVariantsForProduct(row.id, supabase),
     row.seller_id ? sellerById.get(row.seller_id) ?? null : null,
   )));
 }
 
 export async function getPublicProducts(): Promise<Product[]> {
-  const supabase = createClient();
+  const supabase = createPublicClient();
   return publicProductsQuery(
     supabase
       .from("products")
@@ -236,6 +253,7 @@ export async function getPublicProducts(): Promise<Product[]> {
       .eq("approval_status", "approved")
       .eq("publish_status", "published")
       .order("created_at", { ascending: false }),
+    supabase,
   );
 }
 

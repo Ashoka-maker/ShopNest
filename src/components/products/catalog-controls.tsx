@@ -10,10 +10,11 @@ import type { CatalogQuery } from "@/features/products/query";
 
 type CatalogControlsProps = {
   query: CatalogQuery;
-  resultCount: number;
+  resultCount: number | null;
+  loadError?: boolean;
 };
 
-export function CatalogControls({ query, resultCount }: CatalogControlsProps) {
+export function CatalogControls({ query, resultCount, loadError = false }: CatalogControlsProps) {
   const router = useRouter();
   const selectedCategory = getCategoryBySlug(query.category);
 
@@ -27,7 +28,11 @@ export function CatalogControls({ query, resultCount }: CatalogControlsProps) {
           </h1>
           <p className="mt-1 text-sm text-muted">
             {selectedCategory ? `${selectedCategory.description} ` : null}
-            {resultCount} {resultCount === 1 ? "item" : "items"}
+            {loadError
+              ? "Products unavailable"
+              : resultCount === null
+                ? "Loading products…"
+                : `${resultCount} ${resultCount === 1 ? "item" : "items"}`}
             {query.q?.trim() ? ` for “${query.q.trim()}”` : null}
           </p>
         </div>
