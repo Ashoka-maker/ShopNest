@@ -15,6 +15,7 @@ import { getAvailableInventory, getAvailableInventoryForSize, reduceInventoryFor
 import { markOrderInventoryAdjusted } from "@/lib/order-storage";
 import { incrementCouponUsage, validateCoupon } from "@/lib/coupon-storage";
 import type { Coupon } from "@/types/coupon";
+import { getDataSourceMode } from "@/lib/adapters/config";
 import { getProductOptionType, getProductOptionTypeLabel, getProductOptions } from "@/lib/product-options";
 
 async function sendConfirmationEmail(order: Order): Promise<boolean> {
