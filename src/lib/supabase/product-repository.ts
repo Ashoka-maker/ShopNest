@@ -554,34 +554,26 @@ async function syncProductVariants(productId: string, input: ProductFormData) {
 
 export async function createSellerProductInSupabase(
   input: ProductFormData,
-  sellerId: string,
   requestSlug?: string,
-  approvalStatus: Product["approvalStatus"] = "pending",
-  publishStatus: Product["publishStatus"] = "unpublished",
 ) {
-  const supabase = createClient();
-  const categoryId = await categoryIdForSlug(input.category);
-  const slug = requestSlug ?? `${input.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Date.now()}`;
+  const response = await fetch("/api/seller/products", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ product: input, slug: requestSlug }),
+  });
+  const result = await response.json().catch(() => null) as {
+    product?: ProductRow;
+    variants?: VariantRow[];
+    error?: { code?: string | null; message?: string; details?: string | null; hint?: string | null };
+  } | null;
 
-  const { data: existingData, error: existingError } = await supabase
-    .from("products")
-    .select(PRODUCT_SELECT)
-    .eq("seller_id", sellerId)
-    .eq("slug", slug)
-    .maybeSingle();
-  if (existingError) throw existingError;
-  if (existingData) {
-    return updateSellerProductInSupabase((existingData as unknown as ProductRow).id, input, sellerId, approvalStatus, publishStatus);
+  if (!response.ok || !result?.product) {
+    const error = result?.error;
+    const context = [error?.code, error?.message, error?.details, error?.hint].filter(Boolean).join(": ");
+    throw new Error(context || `Product creation failed with status ${response.status}`);
   }
 
-  const row = productWrite(input, sellerId, slug, approvalStatus, publishStatus);
-  row.category_id = categoryId;
-
-  const { data, error } = await supabase.from("products").insert(row).select(PRODUCT_SELECT).single();
-  if (error) throw error;
-  const product = data as unknown as ProductRow;
-  await syncProductVariants(product.id, input);
-  return toProduct(product, await variantsForProduct(product.id));
+  return toProduct(result.product, (result.variants ?? []).map(toVariant));
 }
 
 export async function createAdminProductInSupabase(input: ProductFormData) {

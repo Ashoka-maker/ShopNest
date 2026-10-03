@@ -235,10 +235,11 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
 
       if (supabaseMode && mode === "create") {
         const cachedProduct = createSellerProductFromData(formData, seller.id, seller.storeName);
-        const remoteProduct = await createSellerProductInSupabase(formData, remoteSellerId, cachedProduct.slug);
+        const remoteProduct = await createSellerProductInSupabase(formData, cachedProduct.slug);
         saveSellerProduct({
           ...cachedProduct,
           id: remoteProduct.id,
+          slug: remoteProduct.slug,
           sellerName: seller.storeName,
           name: remoteProduct.name,
           description: remoteProduct.description,
@@ -261,14 +262,12 @@ export function ProductFormPage({ mode, params }: ProductFormPageProps) {
           ? await updateSellerProductInSupabase(supabaseProductId, formData, remoteSellerId)
           : await createSellerProductInSupabase(
             formData,
-            remoteSellerId,
             cachedProduct.slug,
-            cachedProduct.approvalStatus,
-            cachedProduct.publishStatus,
           );
         saveSellerProduct({
           ...cachedProduct,
           id: remoteProduct.id,
+          slug: remoteProduct.slug,
           sellerName: seller.storeName,
           name: remoteProduct.name,
           description: remoteProduct.description,
