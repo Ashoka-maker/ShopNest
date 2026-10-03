@@ -6,7 +6,9 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { useAuth } from "@/lib/auth-context";
-import { saveSeller, generateSellerId } from "@/lib/seller-storage";
+import { saveSeller, generateSellerId, updateSeller } from "@/lib/seller-storage";
+import { getDataSourceMode } from "@/lib/adapters/config";
+import { ensureSellerInSupabase } from "@/lib/supabase/product-repository";
 
 export function SellerSignupPage() {
   const router = useRouter();
@@ -34,7 +36,10 @@ export function SellerSignupPage() {
 
     try {
       // Sign up as seller
-      const result = await signUp(formData.name, formData.email, formData.password, "seller");
+      const result = await signUp(formData.name, formData.email, formData.password, "seller", {
+        storeName: formData.storeName,
+        bio: formData.bio,
+      });
       
       if (!result.success) {
         setError(result.error || "Failed to create account");
@@ -57,6 +62,11 @@ export function SellerSignupPage() {
 
         // Save seller to localStorage
         saveSeller(seller);
+
+        if (getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid") {
+          const supabaseSellerId = await ensureSellerInSupabase(result.userId, seller.storeName, seller.bio);
+          updateSeller(result.userId, { supabaseSellerId });
+        }
       }
 
       // Redirect to seller dashboard

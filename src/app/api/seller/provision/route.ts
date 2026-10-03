@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdminClient, getSupabaseServerClient } from "@/lib/supabase/server";
 
 type ProvisionRequest = {
-  storeName?: string;
-  bio?: string;
-  role?: "seller";
+  storeName?: unknown;
+  bio?: unknown;
 };
 
 function supabaseError(error: { code?: string; message?: string; details?: string; hint?: string }) {
@@ -14,6 +13,10 @@ function supabaseError(error: { code?: string; message?: string; details?: strin
     details: error.details ?? null,
     hint: error.hint ?? null,
   };
+}
+
+function validText(value: unknown): value is string {
+  return typeof value === "string";
 }
 
 export async function POST(request: Request) {
@@ -27,61 +30,89 @@ export async function POST(request: Request) {
     );
   }
 
-  const admin = await getSupabaseAdminClient();
-  const body = (await request.json().catch(() => ({}))) as ProvisionRequest;
-  if (body.role !== "seller" || authData.user.user_metadata?.role !== "seller") {
-    return NextResponse.json({ error: { message: "A seller-authenticated provisioning request is required" } }, { status: 403 });
+  let body: ProvisionRequest;
+  try {
+    const parsedBody: unknown = await request.json();
+    if (typeof parsedBody !== "object" || parsedBody === null || Array.isArray(parsedBody)) {
+      return NextResponse.json({ error: { message: "A seller details object is required" } }, { status: 400 });
+    }
+    body = parsedBody as ProvisionRequest;
+  } catch {
+    return NextResponse.json({ error: { message: "A valid JSON request is required" } }, { status: 400 });
   }
 
-  const { data: existingProfile, error: profileLookupError } = await admin
-    .from("profiles")
-    .select("role")
-    .eq("id", authData.user.id)
-    .maybeSingle();
+  if (
+    (body.storeName !== undefined && !validText(body.storeName)) ||
+    (body.bio !== undefined && !validText(body.bio))
+  ) {
+    return NextResponse.json({ error: { message: "Seller details must be text" } }, { status: 400 });
+  }
+
+  const admin = await getSupabaseAdminClient();
+  const [{ data: existingProfile, error: profileLookupError }, { data: existingSeller, error: sellerLookupError }] =
+    await Promise.all([
+      admin
+        .from("profiles")
+        .select("role, full_name, email")
+        .eq("id", authData.user.id)
+        .maybeSingle(),
+      admin
+        .from("sellers")
+        .select("id")
+        .eq("user_id", authData.user.id)
+        .maybeSingle(),
+    ]);
 
   if (profileLookupError) {
     return NextResponse.json({ error: supabaseError(profileLookupError) }, { status: 500 });
   }
-
-  const storeName = body.storeName?.trim() ?? "";
-  const bio = body.bio?.trim() ?? "";
-
-  const { error: profileError } = await admin.from("profiles").upsert({
-    id: authData.user.id,
-    email: authData.user.email,
-    full_name: authData.user.user_metadata?.full_name ?? storeName,
-    role: "seller",
-    updated_at: new Date().toISOString(),
-  });
-
-  if (profileError) {
-    return NextResponse.json({ error: supabaseError(profileError) }, { status: 500 });
-  }
-
-  const { data: existingSeller, error: sellerLookupError } = await admin
-    .from("sellers")
-    .select("id")
-    .eq("user_id", authData.user.id)
-    .maybeSingle();
-
   if (sellerLookupError) {
     return NextResponse.json({ error: supabaseError(sellerLookupError) }, { status: 500 });
+  }
+
+  const metadataRole = authData.user.user_metadata?.role;
+  if (metadataRole === "admin" || existingProfile?.role === "admin") {
+    return NextResponse.json({ error: { message: "Administrator accounts cannot be provisioned as sellers" } }, { status: 403 });
+  }
+  if (metadataRole !== "seller" && existingProfile?.role !== "seller") {
+    return NextResponse.json({ error: { message: "A seller-authenticated account is required" } }, { status: 403 });
+  }
+
+  if (existingProfile?.role !== "seller") {
+    const { error: profileError } = await admin.from("profiles").upsert({
+      id: authData.user.id,
+      email: existingProfile?.email ?? authData.user.email,
+      full_name: existingProfile?.full_name ?? authData.user.user_metadata?.full_name ?? null,
+      role: "seller",
+      updated_at: new Date().toISOString(),
+    });
+
+    if (profileError) {
+      return NextResponse.json({ error: supabaseError(profileError) }, { status: 500 });
+    }
   }
 
   if (existingSeller) {
     return NextResponse.json({ sellerId: existingSeller.id });
   }
 
-  if (!storeName || !bio) {
-    return NextResponse.json({ error: { message: "Store name and bio are required" } }, { status: 400 });
-  }
+  const metadataStoreName = authData.user.user_metadata?.store_name;
+  const metadataBio = authData.user.user_metadata?.store_bio;
+  const emailPrefix = authData.user.email?.split("@")[0]?.trim();
+  const storeName = (body.storeName as string | undefined)?.trim()
+    || (validText(metadataStoreName) ? metadataStoreName.trim() : "")
+    || existingProfile?.full_name?.trim()
+    || emailPrefix
+    || "ShopNest Store";
+  const bio = (body.bio as string | undefined)?.trim()
+    || (validText(metadataBio) ? metadataBio.trim() : "");
 
   const { data: seller, error: sellerError } = await admin
     .from("sellers")
     .insert({
       user_id: authData.user.id,
       store_name: storeName,
-      bio,
+      bio: bio || null,
       approval_status: "pending",
       is_active: false,
       verification_status: "pending",
@@ -90,6 +121,17 @@ export async function POST(request: Request) {
     .single();
 
   if (sellerError) {
+    if (sellerError.code === "23505") {
+      const { data: concurrentSeller, error: concurrentLookupError } = await admin
+        .from("sellers")
+        .select("id")
+        .eq("user_id", authData.user.id)
+        .maybeSingle();
+      if (concurrentLookupError) {
+        return NextResponse.json({ error: supabaseError(concurrentLookupError) }, { status: 500 });
+      }
+      if (concurrentSeller) return NextResponse.json({ sellerId: concurrentSeller.id });
+    }
     return NextResponse.json({ error: supabaseError(sellerError) }, { status: 500 });
   }
 

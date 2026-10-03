@@ -47,7 +47,7 @@ export async function provisionSeller(storeName: string, bio: string): Promise<s
   const response = await fetch("/api/seller/provision", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ storeName, bio, role: "seller" }),
+    body: JSON.stringify({ storeName, bio }),
   });
   const result = await response.json().catch(() => null) as { sellerId?: string; error?: { message?: string } } | null;
 
@@ -94,7 +94,13 @@ export async function getClientUser() {
 /**
  * Client-side: Sign up new user
  */
-export async function signUpClient(email: string, password: string, name: string, role: UserRole = "customer") {
+export async function signUpClient(
+  email: string,
+  password: string,
+  name: string,
+  role: UserRole = "customer",
+  sellerDetails?: { storeName: string; bio: string },
+) {
   const safeRole = normalizeUserRole(role);
   const supabase = createClient();
 
@@ -105,6 +111,9 @@ export async function signUpClient(email: string, password: string, name: string
       data: {
         full_name: name,
         role: safeRole,
+        ...(safeRole === "seller" && sellerDetails
+          ? { store_name: sellerDetails.storeName.trim(), store_bio: sellerDetails.bio.trim() }
+          : {}),
       },
     },
   });

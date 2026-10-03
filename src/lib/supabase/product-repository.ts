@@ -360,13 +360,10 @@ export async function ensureSellerInSupabase(userId: string, storeName: string, 
     throw new Error("The local seller user ID does not match the authenticated Supabase user");
   }
 
-  const existingSellerId = await getSellerIdForUser(userId);
-  if (existingSellerId) return existingSellerId;
-
   const response = await fetch("/api/seller/provision", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ storeName, bio, role: "seller" }),
+    body: JSON.stringify({ storeName, bio }),
   });
   const result = await response.json().catch(() => null) as { sellerId?: string; error?: { message?: string } } | null;
 

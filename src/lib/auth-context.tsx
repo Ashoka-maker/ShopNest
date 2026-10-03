@@ -41,6 +41,7 @@ type AuthContextType = {
     email: string,
     password: string,
     role?: UserRole,
+    sellerDetails?: { storeName: string; bio: string },
   ) => Promise<{ success: boolean; error?: string; userId?: string; role?: UserRole }>;
   signOut: () => void;
   updateProfile: (name: string, email: string) => Promise<{ success: boolean; error?: string }>;
@@ -130,6 +131,8 @@ type SupabaseAuthUser = {
   user_metadata?: {
     full_name?: string;
     role?: string;
+    store_name?: string;
+    store_bio?: string;
   };
   profile?: {
     role?: string;
@@ -170,7 +173,10 @@ async function ensureAuthenticatedIdentity(supabaseUser: SupabaseAuthUser, user:
 
   if (user.role === "seller" || supabaseUser.user_metadata?.role === "seller") {
     const seller = getSellerByUserId(supabaseUser.id);
-    await provisionSeller(seller?.storeName ?? "", seller?.bio ?? "");
+    await provisionSeller(
+      seller?.storeName ?? supabaseUser.user_metadata?.store_name ?? "",
+      seller?.bio ?? supabaseUser.user_metadata?.store_bio ?? "",
+    );
     const refreshedUser = await getClientUser();
     if (!refreshedUser || refreshedUser.profile?.role !== "seller") {
       throw new Error("Supabase seller profile was not provisioned with seller role");
@@ -337,6 +343,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     role: UserRole = "customer",
+    sellerDetails?: { storeName: string; bio: string },
   ): Promise<{ success: boolean; error?: string; userId?: string; role?: UserRole }> => {
     setIsLoading(true);
     
@@ -358,7 +365,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     if (useSupabaseAuth) {
       try {
-        const result = await signUpClient(email, password, name, role);
+        const result = await signUpClient(email, password, name, role, sellerDetails);
 
         if (result.success && result.user) {
           const hydratedUser = await getClientUser();
