@@ -15,6 +15,15 @@ export function SellerRegistrationPage() {
   const [formData, setFormData] = useState({
     storeName: "",
     bio: "",
+    contactName: "",
+    contactEmail: "",
+    contactPhone: "",
+    addressLine1: "",
+    addressLine2: "",
+    city: "",
+    state: "",
+    postalCode: "",
+    country: "",
   });
 
   // Redirect if not logged in
@@ -56,6 +65,15 @@ export function SellerRegistrationPage() {
       id: generateSellerId(),
       userId: user.id,
       storeName: formData.storeName.trim(),
+      contactName: formData.contactName.trim() || user.name,
+      contactEmail: formData.contactEmail.trim() || user.email,
+      contactPhone: formData.contactPhone.trim(),
+      addressLine1: formData.addressLine1.trim(),
+      addressLine2: formData.addressLine2.trim(),
+      city: formData.city.trim(),
+      state: formData.state.trim(),
+      postalCode: formData.postalCode.trim(),
+      country: formData.country.trim(),
       bio: formData.bio.trim(),
       createdAt: new Date().toISOString(),
       approvalStatus: "pending" as const,
@@ -114,6 +132,20 @@ export function SellerRegistrationPage() {
                 className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-brand/20 resize-none"
                 placeholder="Tell customers about your store and what makes it special..."
               />
+            </div>
+            <div className="space-y-4">
+              <h2 className="font-semibold text-sm">Contact and address for ShopNest administrators</h2>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="text-sm font-medium">Contact name<input name="contactName" value={formData.contactName || user.name} onChange={handleInputChange} required className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 font-normal" /></label>
+                <label className="text-sm font-medium">Contact email<input name="contactEmail" type="email" value={formData.contactEmail || user.email} onChange={handleInputChange} required className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 font-normal" /></label>
+                <label className="text-sm font-medium">Contact phone<input name="contactPhone" type="tel" value={formData.contactPhone} onChange={handleInputChange} required className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 font-normal" /></label>
+                <label className="text-sm font-medium sm:col-span-2">Address line 1<input name="addressLine1" value={formData.addressLine1} onChange={handleInputChange} className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 font-normal" /></label>
+                <label className="text-sm font-medium sm:col-span-2">Address line 2 (optional)<input name="addressLine2" value={formData.addressLine2} onChange={handleInputChange} className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 font-normal" /></label>
+                <label className="text-sm font-medium">City<input name="city" value={formData.city} onChange={handleInputChange} className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 font-normal" /></label>
+                <label className="text-sm font-medium">State / region<input name="state" value={formData.state} onChange={handleInputChange} className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 font-normal" /></label>
+                <label className="text-sm font-medium">Postal code<input name="postalCode" value={formData.postalCode} onChange={handleInputChange} className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 font-normal" /></label>
+                <label className="text-sm font-medium">Country<input name="country" value={formData.country} onChange={handleInputChange} className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 font-normal" /></label>
+              </div>
             </div>
 
             <div className="bg-brand/5 rounded-xl p-4">

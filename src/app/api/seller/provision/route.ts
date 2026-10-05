@@ -4,6 +4,15 @@ import { getSupabaseAdminClient, getSupabaseServerClient } from "@/lib/supabase/
 type ProvisionRequest = {
   storeName?: unknown;
   bio?: unknown;
+  contactName?: unknown;
+  contactEmail?: unknown;
+  contactPhone?: unknown;
+  addressLine1?: unknown;
+  addressLine2?: unknown;
+  city?: unknown;
+  state?: unknown;
+  postalCode?: unknown;
+  country?: unknown;
 };
 
 function supabaseError(error: { code?: string; message?: string; details?: string; hint?: string }) {
@@ -82,7 +91,16 @@ export async function POST(request: Request) {
 
   if (
     (body.storeName !== undefined && !validText(body.storeName)) ||
-    (body.bio !== undefined && !validText(body.bio))
+    (body.bio !== undefined && !validText(body.bio)) ||
+    (body.contactName !== undefined && !validText(body.contactName)) ||
+    (body.contactEmail !== undefined && !validText(body.contactEmail)) ||
+    (body.contactPhone !== undefined && !validText(body.contactPhone)) ||
+    (body.addressLine1 !== undefined && !validText(body.addressLine1)) ||
+    (body.addressLine2 !== undefined && !validText(body.addressLine2)) ||
+    (body.city !== undefined && !validText(body.city)) ||
+    (body.state !== undefined && !validText(body.state)) ||
+    (body.postalCode !== undefined && !validText(body.postalCode)) ||
+    (body.country !== undefined && !validText(body.country))
   ) {
     return NextResponse.json({ error: { message: "Seller details must be text" } }, { status: 400 });
   }
@@ -100,7 +118,7 @@ export async function POST(request: Request) {
         .maybeSingle(),
       admin
         .from("sellers")
-        .select("id")
+        .select("id, contact_name, contact_email, contact_phone, address_line1, address_line2, city, state, postal_code, country")
         .eq("user_id", authData.user.id)
         .maybeSingle(),
     ]);
@@ -141,16 +159,13 @@ export async function POST(request: Request) {
     }
   }
 
-  if (existingSeller) {
-    logProvisioning("existing seller returned", authData.user.id, profileRole, metadataRole, {
-      sellerId: existingSeller.id,
-    });
-    return NextResponse.json({ sellerId: existingSeller.id });
-  }
-
   const metadataStoreName = authData.user.user_metadata?.store_name;
   const metadataBio = authData.user.user_metadata?.store_bio;
   const emailPrefix = authData.user.email?.split("@")[0]?.trim();
+  const metadataText = (key: string) => {
+    const value = authData.user.user_metadata?.[key];
+    return validText(value) ? value.trim() : "";
+  };
   const storeName = (body.storeName as string | undefined)?.trim()
     || (validText(metadataStoreName) ? metadataStoreName.trim() : "")
     || existingProfile?.full_name?.trim()
@@ -159,6 +174,53 @@ export async function POST(request: Request) {
     || "ShopNest Store";
   const bio = (body.bio as string | undefined)?.trim()
     || (validText(metadataBio) ? metadataBio.trim() : "");
+  const contactName = (body.contactName as string | undefined)?.trim()
+    || existingProfile?.full_name?.trim()
+    || metadataText("contact_name")
+    || metadataText("full_name");
+  const contactEmail = (body.contactEmail as string | undefined)?.trim()
+    || existingProfile?.email?.trim()
+    || authData.user.email?.trim()
+    || "";
+  const contactPhone = (body.contactPhone as string | undefined)?.trim()
+    || authData.user.phone?.trim()
+    || metadataText("contact_phone");
+  const contactFields = {
+    contact_name: contactName || null,
+    contact_email: contactEmail || null,
+    contact_phone: contactPhone || null,
+    address_line1: (body.addressLine1 as string | undefined)?.trim() || metadataText("address_line1") || null,
+    address_line2: (body.addressLine2 as string | undefined)?.trim() || metadataText("address_line2") || null,
+    city: (body.city as string | undefined)?.trim() || metadataText("city") || null,
+    state: (body.state as string | undefined)?.trim() || metadataText("state") || null,
+    postal_code: (body.postalCode as string | undefined)?.trim() || metadataText("postal_code") || null,
+    country: (body.country as string | undefined)?.trim() || metadataText("country") || null,
+  };
+
+  if (existingSeller) {
+    const missingContactFields = Object.fromEntries(
+      Object.entries(contactFields).filter(([key, value]) =>
+        !existingSeller[key as keyof typeof existingSeller] && value,
+      ),
+    );
+
+    if (Object.keys(missingContactFields).length) {
+      const { error: backfillError } = await admin
+        .from("sellers")
+        .update(missingContactFields)
+        .eq("id", existingSeller.id);
+      if (backfillError) {
+        logProvisioningError("existing seller contact backfill", authData.user.id, profileRole, metadataRole, backfillError);
+        return NextResponse.json({ error: supabaseError(backfillError) }, { status: 500 });
+      }
+    }
+
+    logProvisioning("existing seller returned", authData.user.id, profileRole, metadataRole, {
+      sellerId: existingSeller.id,
+      contactFieldsBackfilled: Object.keys(missingContactFields),
+    });
+    return NextResponse.json({ sellerId: existingSeller.id });
+  }
 
   const { data: seller, error: sellerError } = await admin
     .from("sellers")
@@ -166,6 +228,7 @@ export async function POST(request: Request) {
       user_id: authData.user.id,
       store_name: storeName,
       bio: bio || null,
+      ...contactFields,
       approval_status: "pending",
       is_active: false,
       verification_status: "pending",

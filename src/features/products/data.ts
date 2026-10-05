@@ -74,7 +74,7 @@ export function saveCatalogProduct(product: Product): boolean {
   }
   const useSupabase = getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid";
   if (useSupabase && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(product.id)) {
-    void updateProductModerationInSupabase(product.id, product.approvalStatus, product.publishStatus)
+    void updateProductModerationInSupabase(product.id, product.approvalStatus, product.publishStatus, product.homepageSection)
       .then(() => {
         if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(PRODUCT_CATALOG_UPDATED_EVENT));
       })
@@ -89,7 +89,7 @@ export async function moderateCatalogProduct(product: Product): Promise<boolean>
 
   if (useSupabase && isSupabaseProduct) {
     try {
-      await updateProductModerationInSupabase(product.id, product.approvalStatus, product.publishStatus);
+      await updateProductModerationInSupabase(product.id, product.approvalStatus, product.publishStatus, product.homepageSection);
     } catch (error) {
       console.error("Unable to update Supabase product moderation; retaining local catalog:", error);
       saveCatalogProduct(product);

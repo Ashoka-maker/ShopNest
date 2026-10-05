@@ -40,8 +40,15 @@ export function AdminSellersPage() {
             bio: remoteSeller.bio ?? "",
             createdAt: remoteSeller.created_at,
             logoUrl: remoteSeller.logo_url ?? undefined,
+            contactName: remoteSeller.contact_name ?? undefined,
             contactEmail: remoteSeller.contact_email ?? undefined,
             contactPhone: remoteSeller.contact_phone ?? undefined,
+            addressLine1: remoteSeller.address_line1 ?? undefined,
+            addressLine2: remoteSeller.address_line2 ?? undefined,
+            city: remoteSeller.city ?? undefined,
+            state: remoteSeller.state ?? undefined,
+            postalCode: remoteSeller.postal_code ?? undefined,
+            country: remoteSeller.country ?? undefined,
             approvalStatus: remoteSeller.approval_status,
             isActive: remoteSeller.is_active,
             verificationStatus: remoteSeller.verification_status,
@@ -201,6 +208,12 @@ export function AdminSellersPage() {
                     <div className="flex-1">
                       <h3 className="font-semibold text-lg">{seller.storeName}</h3>
                       <p className="text-sm text-muted mt-1">{seller.bio}</p>
+                      <div className="mt-3 grid gap-1 text-sm text-muted sm:grid-cols-2">
+                        <p>Contact: {seller.contactName || "Not provided"}</p>
+                        <p>Email: {seller.contactEmail || "Not provided"}</p>
+                        <p>Phone: {seller.contactPhone || "Not provided"}</p>
+                        <p className="sm:col-span-2">Address: {[seller.addressLine1, seller.addressLine2, seller.city, seller.state, seller.postalCode, seller.country].filter(Boolean).join(", ") || "Not provided"}</p>
+                      </div>
                       <p className="text-xs text-muted mt-2">
                         Seller ID: {seller.id} • User ID: {seller.userId}
                       </p>
@@ -277,6 +290,12 @@ export function AdminSellersPage() {
                         <div>
                           <p className="font-medium text-sm">{seller.storeName}</p>
                           <p className="text-xs text-muted">{seller.bio.substring(0, 50)}...</p>
+                          <div className="mt-2 space-y-1 text-xs text-muted">
+                            <p>Contact: {seller.contactName || "Not provided"}</p>
+                            <p>Email: {seller.contactEmail || "Not provided"}</p>
+                            <p>Phone: {seller.contactPhone || "Not provided"}</p>
+                            <p className="max-w-xs">Address: {[seller.addressLine1, seller.addressLine2, seller.city, seller.state, seller.postalCode, seller.country].filter(Boolean).join(", ") || "Not provided"}</p>
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">

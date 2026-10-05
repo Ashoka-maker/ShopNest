@@ -8,6 +8,7 @@ import type {
   ProductSize,
   SizeInventory,
 } from "@/types/product";
+import type { SellerContactDetails } from "@/types/seller";
 import { getProductOptions } from "@/lib/product-options";
 
 export type ProductVariant = {
@@ -81,6 +82,7 @@ type ProductRow = {
   review_count: number;
   approval_status: Product["approvalStatus"];
   publish_status: Product["publishStatus"];
+  homepage_section?: Product["homepageSection"];
   option_type?: ProductOptionType | null;
   created_at?: string;
   updated_at?: string;
@@ -107,7 +109,7 @@ const CATEGORY_SLUGS: ProductCategorySlug[] = [
   "groceries",
 ];
 const PRODUCT_SELECT = "*, categories:category_id(*), sellers:seller_id(id, store_name)";
-const PUBLIC_PRODUCT_SELECT = "id, seller_id, category_id, slug, name, description, highlights, price_cents, compare_at_price_cents, image_url, gallery, inventory, rating, review_count, approval_status, publish_status, option_type, created_at, updated_at, categories:category_id(id, slug, name, description)";
+const PUBLIC_PRODUCT_SELECT = "id, seller_id, category_id, slug, name, description, highlights, price_cents, compare_at_price_cents, image_url, gallery, inventory, rating, review_count, approval_status, publish_status, homepage_section, option_type, created_at, updated_at, categories:category_id(id, slug, name, description)";
 
 function normalizeCategorySlug(value: string | undefined): ProductCategorySlug | null {
   const normalizedValue = value?.trim().toLowerCase();
@@ -161,6 +163,7 @@ function toProduct(row: ProductRow, variants: ProductVariant[] = [], publicSelle
     updatedAt: row.updated_at,
     approvalStatus: row.approval_status,
     publishStatus: row.publish_status,
+    homepageSection: row.homepage_section ?? "none",
   };
 }
 
@@ -368,7 +371,12 @@ export async function createSellerInSupabase(userId: string, storeName: string, 
   return (data as { id: string }).id;
 }
 
-export async function ensureSellerInSupabase(userId: string, storeName: string, bio: string): Promise<string> {
+export async function ensureSellerInSupabase(
+  userId: string,
+  storeName: string,
+  bio: string,
+  contactDetails: SellerContactDetails = {},
+): Promise<string> {
   const supabase = createClient();
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError || !authData.user) {
@@ -381,7 +389,7 @@ export async function ensureSellerInSupabase(userId: string, storeName: string, 
   const response = await fetch("/api/seller/provision", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ storeName, bio }),
+    body: JSON.stringify({ storeName, bio, ...contactDetails }),
   });
   const result = await response.json().catch(() => null) as { sellerId?: string; error?: { message?: string } } | null;
 
@@ -400,6 +408,13 @@ export type SupabaseSeller = {
   logo_url: string | null;
   contact_email: string | null;
   contact_phone: string | null;
+  contact_name: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string | null;
   approval_status: "pending" | "approved" | "rejected";
   is_active: boolean;
   verification_status: "pending" | "verified" | "rejected";
@@ -412,28 +427,67 @@ export async function getSellerFromSupabase(userId: string): Promise<SupabaseSel
   const supabase = createClient();
   const { data, error } = await supabase
     .from("sellers")
-    .select("id, user_id, store_name, bio, logo_url, contact_email, contact_phone, approval_status, is_active, verification_status, verification_note, created_at, updated_at")
+    .select("id, user_id, store_name, bio, logo_url, contact_name, contact_email, contact_phone, address_line1, address_line2, city, state, postal_code, country, approval_status, is_active, verification_status, verification_note, created_at, updated_at")
     .eq("user_id", userId)
     .maybeSingle();
 
   if (error) throw error;
-  return data as SupabaseSeller | null;
+  if (!data) return null;
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("full_name, email")
+    .eq("id", userId)
+    .maybeSingle();
+  if (profileError) throw profileError;
+
+  const seller = data as SupabaseSeller;
+  return {
+    ...seller,
+    contact_name: seller.contact_name ?? profile?.full_name ?? null,
+    contact_email: seller.contact_email ?? profile?.email ?? null,
+  };
 }
 
 export async function getAllSellersFromSupabase(): Promise<SupabaseSeller[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("sellers")
-    .select("id, user_id, store_name, bio, logo_url, contact_email, contact_phone, approval_status, is_active, verification_status, verification_note, created_at, updated_at")
+    .select("id, user_id, store_name, bio, logo_url, contact_name, contact_email, contact_phone, address_line1, address_line2, city, state, postal_code, country, approval_status, is_active, verification_status, verification_note, created_at, updated_at")
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return (data ?? []) as SupabaseSeller[];
+  const sellers = (data ?? []) as unknown as SupabaseSeller[];
+  const userIds = [...new Set(sellers.map((seller) => seller.user_id))];
+  if (!userIds.length) return sellers;
+
+  const { data: profiles, error: profilesError } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .in("id", userIds);
+  if (profilesError) throw profilesError;
+
+  const profileById = new Map(
+    ((profiles ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>)
+      .map((profile) => [profile.id, profile]),
+  );
+  return sellers.map((seller) => {
+    const profile = profileById.get(seller.user_id);
+    return {
+      ...seller,
+      contact_name: seller.contact_name ?? profile?.full_name ?? null,
+      contact_email: seller.contact_email ?? profile?.email ?? null,
+    };
+  });
 }
 
 export async function updateSellerProfileInSupabase(
   sellerId: string,
-  updates: { storeName: string; bio: string; logoUrl?: string; contactEmail?: string; contactPhone?: string },
+  updates: {
+    storeName: string;
+    bio: string;
+    logoUrl?: string;
+  } & SellerContactDetails,
 ): Promise<SupabaseSeller> {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -442,11 +496,18 @@ export async function updateSellerProfileInSupabase(
       store_name: updates.storeName.trim(),
       bio: updates.bio.trim(),
       logo_url: updates.logoUrl?.trim() || null,
+      contact_name: updates.contactName?.trim() || null,
       contact_email: updates.contactEmail?.trim() || null,
       contact_phone: updates.contactPhone?.trim() || null,
+      address_line1: updates.addressLine1?.trim() || null,
+      address_line2: updates.addressLine2?.trim() || null,
+      city: updates.city?.trim() || null,
+      state: updates.state?.trim() || null,
+      postal_code: updates.postalCode?.trim() || null,
+      country: updates.country?.trim() || null,
     })
     .eq("id", sellerId)
-    .select("id, user_id, store_name, bio, logo_url, contact_email, contact_phone, approval_status, is_active, verification_status, verification_note, created_at, updated_at")
+    .select("id, user_id, store_name, bio, logo_url, contact_name, contact_email, contact_phone, address_line1, address_line2, city, state, postal_code, country, approval_status, is_active, verification_status, verification_note, created_at, updated_at")
     .single();
 
   if (error) throw error;
@@ -467,7 +528,7 @@ export async function updateSellerModerationInSupabase(
       ...(updates.verificationNote === undefined ? {} : { verification_note: updates.verificationNote.trim() || null }),
     })
     .eq("id", sellerId)
-    .select("id, user_id, store_name, bio, logo_url, contact_email, contact_phone, approval_status, is_active, verification_status, verification_note, created_at, updated_at")
+    .select("id, user_id, store_name, bio, logo_url, contact_name, contact_email, contact_phone, address_line1, address_line2, city, state, postal_code, country, approval_status, is_active, verification_status, verification_note, created_at, updated_at")
     .single();
 
   if (error) throw error;
@@ -591,7 +652,10 @@ export async function createSellerProductInSupabase(
   return toProduct(result.product, (result.variants ?? []).map(toVariant));
 }
 
-export async function createAdminProductInSupabase(input: ProductFormData) {
+export async function createAdminProductInSupabase(
+  input: ProductFormData,
+  homepageSection: Product["homepageSection"] = "none",
+) {
   const supabase = createClient();
   const categoryId = await categoryIdForSlug(input.category);
   const slug = `${input.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Date.now()}`;
@@ -599,7 +663,11 @@ export async function createAdminProductInSupabase(input: ProductFormData) {
   row.seller_id = null;
   row.category_id = categoryId;
 
-  const { data, error } = await supabase.from("products").insert(row).select(PRODUCT_SELECT).single();
+  const { data, error } = await supabase
+    .from("products")
+    .insert({ ...row, homepage_section: homepageSection })
+    .select(PRODUCT_SELECT)
+    .single();
   if (error) throw error;
   const product = data as unknown as ProductRow;
   await syncProductVariants(product.id, input);
@@ -641,7 +709,11 @@ export async function updateSellerProductInSupabase(
   return toProduct(data as unknown as ProductRow, await variantsForProduct(productId));
 }
 
-export async function updateAdminProductInSupabase(product: Product, input: ProductFormData) {
+export async function updateAdminProductInSupabase(
+  product: Product,
+  input: ProductFormData,
+  homepageSection: Product["homepageSection"] = product.homepageSection ?? "none",
+) {
   const supabase = createClient();
   const categoryId = await categoryIdForSlug(input.category);
   const row = productWrite(input, product.sellerId || null, product.slug, product.approvalStatus, product.publishStatus);
@@ -660,6 +732,7 @@ export async function updateAdminProductInSupabase(product: Product, input: Prod
       gallery: row.gallery,
       inventory: row.inventory,
       option_type: row.option_type,
+      homepage_section: homepageSection,
     })
     .eq("id", product.id)
     .select(PRODUCT_SELECT)
@@ -677,11 +750,20 @@ export async function deleteProductFromSupabase(productId: string): Promise<void
   if (error) throw error;
 }
 
-export async function updateProductModerationInSupabase(productId: string, approvalStatus: Product["approvalStatus"], publishStatus: Product["publishStatus"]): Promise<void> {
+export async function updateProductModerationInSupabase(
+  productId: string,
+  approvalStatus: Product["approvalStatus"],
+  publishStatus: Product["publishStatus"],
+  homepageSection?: Product["homepageSection"],
+): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase
     .from("products")
-    .update({ approval_status: approvalStatus, publish_status: publishStatus })
+    .update({
+      approval_status: approvalStatus,
+      publish_status: publishStatus,
+      ...(homepageSection === undefined ? {} : { homepage_section: homepageSection }),
+    })
     .eq("id", productId);
   if (error) throw error;
 }

@@ -21,6 +21,13 @@ export function SellerSignupPage() {
     password: "",
     storeName: "",
     bio: "",
+    contactPhone: "",
+    addressLine1: "",
+    addressLine2: "",
+    city: "",
+    state: "",
+    postalCode: "",
+    country: "",
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -39,6 +46,15 @@ export function SellerSignupPage() {
       const result = await signUp(formData.name, formData.email, formData.password, "seller", {
         storeName: formData.storeName,
         bio: formData.bio,
+        contactName: formData.name,
+        contactEmail: formData.email,
+        contactPhone: formData.contactPhone,
+        addressLine1: formData.addressLine1,
+        addressLine2: formData.addressLine2,
+        city: formData.city,
+        state: formData.state,
+        postalCode: formData.postalCode,
+        country: formData.country,
       });
       
       if (!result.success) {
@@ -54,6 +70,15 @@ export function SellerSignupPage() {
           userId: result.userId,
           storeName: formData.storeName.trim(),
           bio: formData.bio.trim(),
+          contactName: formData.name.trim(),
+          contactEmail: formData.email.trim(),
+          contactPhone: formData.contactPhone.trim(),
+          addressLine1: formData.addressLine1.trim(),
+          addressLine2: formData.addressLine2.trim(),
+          city: formData.city.trim(),
+          state: formData.state.trim(),
+          postalCode: formData.postalCode.trim(),
+          country: formData.country.trim(),
           createdAt: new Date().toISOString(),
           approvalStatus: "pending" as const,
           isActive: false,
@@ -64,7 +89,17 @@ export function SellerSignupPage() {
         saveSeller(seller);
 
         if (getDataSourceMode() === "supabase" || getDataSourceMode() === "hybrid") {
-          const supabaseSellerId = await ensureSellerInSupabase(result.userId, seller.storeName, seller.bio);
+          const supabaseSellerId = await ensureSellerInSupabase(result.userId, seller.storeName, seller.bio, {
+            contactName: seller.contactName,
+            contactEmail: seller.contactEmail,
+            contactPhone: seller.contactPhone,
+            addressLine1: seller.addressLine1,
+            addressLine2: seller.addressLine2,
+            city: seller.city,
+            state: seller.state,
+            postalCode: seller.postalCode,
+            country: seller.country,
+          });
           updateSeller(result.userId, { supabaseSellerId });
         }
       }
@@ -189,6 +224,29 @@ export function SellerSignupPage() {
                     className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-brand/20 resize-none"
                     placeholder="Tell customers about your store and what makes it special..."
                   />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="text-sm font-medium">Contact phone *
+                    <input type="tel" name="contactPhone" required value={formData.contactPhone} onChange={handleInputChange} className="mt-1 w-full h-11 rounded-xl border border-border bg-background px-4 text-sm outline-none focus:ring-4 focus:ring-brand/20" />
+                  </label>
+                  <label className="text-sm font-medium sm:col-span-2">Address line 1 (optional)
+                    <input name="addressLine1" value={formData.addressLine1} onChange={handleInputChange} className="mt-1 w-full h-11 rounded-xl border border-border bg-background px-4 text-sm outline-none focus:ring-4 focus:ring-brand/20" />
+                  </label>
+                  <label className="text-sm font-medium sm:col-span-2">Address line 2 (optional)
+                    <input name="addressLine2" value={formData.addressLine2} onChange={handleInputChange} className="mt-1 w-full h-11 rounded-xl border border-border bg-background px-4 text-sm outline-none focus:ring-4 focus:ring-brand/20" />
+                  </label>
+                  <label className="text-sm font-medium">City (optional)
+                    <input name="city" value={formData.city} onChange={handleInputChange} className="mt-1 w-full h-11 rounded-xl border border-border bg-background px-4 text-sm outline-none focus:ring-4 focus:ring-brand/20" />
+                  </label>
+                  <label className="text-sm font-medium">State / region (optional)
+                    <input name="state" value={formData.state} onChange={handleInputChange} className="mt-1 w-full h-11 rounded-xl border border-border bg-background px-4 text-sm outline-none focus:ring-4 focus:ring-brand/20" />
+                  </label>
+                  <label className="text-sm font-medium">Postal code (optional)
+                    <input name="postalCode" value={formData.postalCode} onChange={handleInputChange} className="mt-1 w-full h-11 rounded-xl border border-border bg-background px-4 text-sm outline-none focus:ring-4 focus:ring-brand/20" />
+                  </label>
+                  <label className="text-sm font-medium">Country (optional)
+                    <input name="country" value={formData.country} onChange={handleInputChange} className="mt-1 w-full h-11 rounded-xl border border-border bg-background px-4 text-sm outline-none focus:ring-4 focus:ring-brand/20" />
+                  </label>
                 </div>
               </div>
             </div>

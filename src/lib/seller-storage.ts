@@ -65,7 +65,10 @@ const saveStoredSellerProducts = (products: SellerProduct[]) => {
 
 export function saveSeller(seller: Seller): void {
   const sellers = getStoredSellers();
-  sellers.push({ verificationStatus: "pending", ...seller });
+  const existingIndex = sellers.findIndex((existing) => existing.userId === seller.userId);
+  const savedSeller = { verificationStatus: "pending" as const, ...seller };
+  if (existingIndex >= 0) sellers[existingIndex] = { ...sellers[existingIndex], ...savedSeller };
+  else sellers.push(savedSeller);
   saveStoredSellers(sellers);
 }
 
@@ -87,14 +90,21 @@ export function updateSeller(userId: string, updates: Partial<Seller>): Seller |
 
 export function updateSellerProfile(
   userId: string,
-  updates: Pick<Seller, "storeName" | "bio" | "logoUrl" | "contactEmail" | "contactPhone">,
+  updates: Pick<Seller, "storeName" | "bio" | "logoUrl"> & Partial<Pick<Seller, "contactName" | "contactEmail" | "contactPhone" | "addressLine1" | "addressLine2" | "city" | "state" | "postalCode" | "country">>,
 ): Seller | null {
   return updateSeller(userId, {
     storeName: updates.storeName.trim(),
     bio: updates.bio.trim(),
     logoUrl: updates.logoUrl?.trim() || undefined,
+    contactName: updates.contactName?.trim() || undefined,
     contactEmail: updates.contactEmail?.trim() || undefined,
     contactPhone: updates.contactPhone?.trim() || undefined,
+    addressLine1: updates.addressLine1?.trim() || undefined,
+    addressLine2: updates.addressLine2?.trim() || undefined,
+    city: updates.city?.trim() || undefined,
+    state: updates.state?.trim() || undefined,
+    postalCode: updates.postalCode?.trim() || undefined,
+    country: updates.country?.trim() || undefined,
   });
 }
 

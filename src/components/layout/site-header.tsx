@@ -11,6 +11,7 @@ import { SearchForm } from "@/components/products/search-form";
 import { useCart } from "@/lib/cart-context";
 import { useAuth } from "@/lib/auth-context";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 
 export function SiteHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -40,6 +41,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2 lg:ml-4">
+          <ThemeToggle />
           {user ? (
             <div className="hidden sm:flex items-center gap-2">
               <span className="text-sm font-medium">Hello, {user.name}</span>
@@ -84,12 +86,12 @@ export function SiteHeader() {
           )}
           <Link 
             href="/cart" 
-            className="shopnest-focus relative inline-flex h-11 items-center justify-center rounded-full border border-brand/45 bg-surface px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:border-brand hover:bg-ink-soft hover:text-brand hover:shadow-[0_8px_24px_rgba(243,154,61,0.12)]"
+            className="shopnest-focus relative inline-flex h-11 items-center justify-center rounded-full border border-brand/45 bg-surface px-5 text-sm font-semibold text-foreground shadow-sm transition hover:-translate-y-0.5 hover:border-brand hover:bg-ink-soft hover:text-brand hover:shadow-[0_8px_24px_rgba(243,154,61,0.12)]"
             aria-label="Cart"
           >
             Cart
             {cartCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-brand text-xs font-semibold text-white">
+              <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-brand text-xs font-semibold text-black">
                 {cartCount}
               </span>
             )}

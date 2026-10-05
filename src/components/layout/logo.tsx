@@ -10,7 +10,7 @@ export function Logo({ className }: LogoProps) {
     <span className={cn("inline-flex items-center gap-2", className)}>
       <span
         aria-hidden
-        className="grid h-9 w-9 place-items-center rounded-xl bg-brand text-white shadow-sm"
+        className="grid h-9 w-9 place-items-center rounded-xl bg-brand text-black shadow-sm"
       >
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none">
           <path

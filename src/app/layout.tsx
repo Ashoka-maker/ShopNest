@@ -27,13 +27,23 @@ export const metadata: Metadata = {
     "ShopNest is a modern marketplace for everyday essentials, discovery, and trusted sellers.",
 };
 
+const themeInitializationScript = `try {
+  const theme = localStorage.getItem("shopnest-theme");
+  if (theme === "light" || theme === "dark") {
+    document.documentElement.dataset.theme = theme;
+  }
+} catch {}`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitializationScript }} />
+      </head>
       <body className={`${outfit.variable} ${sourceSerif.variable} font-sans`}>
         <CartProvider>
           <AuthProvider>

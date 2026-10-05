@@ -49,6 +49,7 @@ export type Product = {
   updatedAt?: string;
   approvalStatus?: "draft" | "pending" | "approved" | "rejected";
   publishStatus?: "published" | "unpublished";
+  homepageSection?: "none" | "deal" | "trending" | "new";
 };
 
 export type SellerProduct = {

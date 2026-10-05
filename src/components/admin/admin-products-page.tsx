@@ -24,8 +24,9 @@ import {
 type FormState = {
   name: string; description: string; price: string; compareAt: string; category: ProductCategorySlug;
   inventory: string; imageUrl: string; sellerName: string; sellerId: string; optionType: ProductOptionType; options: ProductOption[]; sizes: ProductSize[]; inventoryBySize: SizeInventory;
+  homepageSection: NonNullable<Product["homepageSection"]>;
 };
-const emptyForm: FormState = { name: "", description: "", price: "", compareAt: "", category: "home-living", inventory: "0", imageUrl: "", sellerName: "ShopNest", sellerId: "shopnest-admin", optionType: "none", options: [], sizes: [], inventoryBySize: {} };
+const emptyForm: FormState = { name: "", description: "", price: "", compareAt: "", category: "home-living", inventory: "0", imageUrl: "", sellerName: "ShopNest", sellerId: "shopnest-admin", optionType: "none", options: [], sizes: [], inventoryBySize: {}, homepageSection: "none" };
 
 export function AdminProductsPage() {
   const router = useRouter();
@@ -76,7 +77,7 @@ export function AdminProductsPage() {
   const openEdit = (product: Product) => {
     const options = getProductOptions(product);
     setEditing(product);
-    setForm({ name: product.name, description: product.description, price: String(product.priceCents / 100), compareAt: product.compareAtPriceCents ? String(product.compareAtPriceCents / 100) : "", category: product.category, inventory: String(product.inventory), imageUrl: product.imageUrl, sellerName: product.sellerName, sellerId: product.sellerId, optionType: getProductOptionType(product), options, sizes: options.map((option) => option.value), inventoryBySize: Object.fromEntries(options.map((option) => [option.value, option.inventory])) });
+    setForm({ name: product.name, description: product.description, price: String(product.priceCents / 100), compareAt: product.compareAtPriceCents ? String(product.compareAtPriceCents / 100) : "", category: product.category, inventory: String(product.inventory), imageUrl: product.imageUrl, sellerName: product.sellerName, sellerId: product.sellerId, optionType: getProductOptionType(product), options, sizes: options.map((option) => option.value), inventoryBySize: Object.fromEntries(options.map((option) => [option.value, option.inventory])), homepageSection: product.homepageSection ?? "none" });
   };
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -90,6 +91,7 @@ export function AdminProductsPage() {
       description: form.description.trim(), priceCents: Math.round(Number(form.price) * 100), compareAtPriceCents: form.compareAt ? Math.round(Number(form.compareAt) * 100) : null,
       category: form.category, inventory: Math.max(0, Number(form.inventory) || 0), imageUrl: form.imageUrl.trim(), sellerName: form.sellerName.trim(), sellerId: form.sellerId.trim() || "shopnest-admin", optionType: form.optionType, options: form.options, sizes: form.sizes, inventoryBySize: form.inventoryBySize, updatedAt: new Date().toISOString(),
       approvalStatus: editing?.approvalStatus || "approved", publishStatus: editing?.publishStatus || "published",
+      homepageSection: form.homepageSection,
     };
     if (useSupabase) {
       try {
@@ -106,7 +108,7 @@ export function AdminProductsPage() {
           options: product.options,
           sizes: product.sizes || [],
           inventoryBySize: product.inventoryBySize,
-        });
+        }, product.homepageSection);
         else await createAdminProductInSupabase({
           name: product.name,
           description: product.description,
@@ -120,7 +122,7 @@ export function AdminProductsPage() {
           options: product.options,
           sizes: product.sizes || [],
           inventoryBySize: product.inventoryBySize,
-        });
+        }, product.homepageSection);
       } catch (error) {
         console.error("Unable to save Supabase admin product:", error);
         return;
@@ -152,6 +154,7 @@ export function AdminProductsPage() {
       <input type="number" min="0" step="0.01" placeholder="Original price (₹)" value={form.compareAt} onChange={(e) => setForm({ ...form, compareAt: e.target.value })} className="rounded-xl border border-border bg-background px-3 py-3" />
       <input type="number" min="0" placeholder="Inventory" value={form.inventory} onChange={(e) => setForm({ ...form, inventory: e.target.value })} className="rounded-xl border border-border bg-background px-3 py-3" />
       <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as ProductCategorySlug })} className="rounded-xl border border-border bg-background px-3 py-3">{CATEGORIES.map((item) => <option key={item.slug} value={item.slug}>{item.name}</option>)}</select>
+      <label className="grid gap-1 text-sm font-medium">Homepage section<select value={form.homepageSection} onChange={(e) => setForm({ ...form, homepageSection: e.target.value as NonNullable<Product["homepageSection"]> })} className="rounded-xl border border-border bg-background px-3 py-3"><option value="none">No homepage section</option><option value="deal">Deal of the Day</option><option value="trending">Trending Now</option><option value="new">New Products</option></select></label>
       <div className="flex gap-2 sm:col-span-2 lg:col-span-4"><Button type="submit">{editing ? "Save changes" : "Create product"}</Button>{editing ? <Button type="button" variant="secondary" onClick={() => { setEditing(null); setForm(emptyForm); }}>Cancel</Button> : null}</div>
     </form>
     <div className="mt-8 grid gap-3 rounded-3xl border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-5"><input placeholder="Search products or sellers" value={query} onChange={(e) => setQuery(e.target.value)} className="rounded-xl border border-border bg-background px-3 py-3 lg:col-span-2" /><select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-xl border border-border bg-background px-3 py-3"><option value="all">All categories</option>{CATEGORIES.map((item) => <option key={item.slug} value={item.slug}>{item.name}</option>)}</select><select value={seller} onChange={(e) => setSeller(e.target.value)} className="rounded-xl border border-border bg-background px-3 py-3"><option value="all">All sellers</option>{[...new Map(products.map((item) => [item.sellerId, item.sellerName])).entries()].map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select><select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-xl border border-border bg-background px-3 py-3"><option value="all">All statuses</option>{["draft","pending","approved","rejected","published","unpublished"].map((item) => <option key={item} value={item}>{item}</option>)}</select><select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-xl border border-border bg-background px-3 py-3"><option value="newest">Newest</option><option value="price-low">Price low</option><option value="price-high">Price high</option></select></div>

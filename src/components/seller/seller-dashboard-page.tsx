@@ -53,8 +53,15 @@ export function SellerDashboardPage() {
             storeName: remoteSeller.store_name,
             bio: remoteSeller.bio ?? "",
             logoUrl: remoteSeller.logo_url ?? undefined,
+            contactName: remoteSeller.contact_name ?? undefined,
             contactEmail: remoteSeller.contact_email ?? undefined,
             contactPhone: remoteSeller.contact_phone ?? undefined,
+            addressLine1: remoteSeller.address_line1 ?? undefined,
+            addressLine2: remoteSeller.address_line2 ?? undefined,
+            city: remoteSeller.city ?? undefined,
+            state: remoteSeller.state ?? undefined,
+            postalCode: remoteSeller.postal_code ?? undefined,
+            country: remoteSeller.country ?? undefined,
             approvalStatus: remoteSeller.approval_status,
             isActive: remoteSeller.is_active,
             verificationStatus: remoteSeller.verification_status,
@@ -161,8 +168,15 @@ export function SellerDashboardPage() {
       storeName: String(form.get("storeName") || ""),
       bio: String(form.get("bio") || ""),
       logoUrl: String(form.get("logoUrl") || ""),
+      contactName: String(form.get("contactName") || ""),
       contactEmail: String(form.get("contactEmail") || ""),
       contactPhone: String(form.get("contactPhone") || ""),
+      addressLine1: String(form.get("addressLine1") || ""),
+      addressLine2: String(form.get("addressLine2") || ""),
+      city: String(form.get("city") || ""),
+      state: String(form.get("state") || ""),
+      postalCode: String(form.get("postalCode") || ""),
+      country: String(form.get("country") || ""),
     };
 
     try {
@@ -173,8 +187,15 @@ export function SellerDashboardPage() {
           storeName: remoteSeller.store_name,
           bio: remoteSeller.bio ?? "",
           logoUrl: remoteSeller.logo_url ?? undefined,
+          contactName: remoteSeller.contact_name ?? undefined,
           contactEmail: remoteSeller.contact_email ?? undefined,
           contactPhone: remoteSeller.contact_phone ?? undefined,
+          addressLine1: remoteSeller.address_line1 ?? undefined,
+          addressLine2: remoteSeller.address_line2 ?? undefined,
+          city: remoteSeller.city ?? undefined,
+          state: remoteSeller.state ?? undefined,
+          postalCode: remoteSeller.postal_code ?? undefined,
+          country: remoteSeller.country ?? undefined,
         });
         setProfileMessage(updated ? "Store profile updated." : "Unable to update store profile.");
         if (updated) setSeller(updated);
@@ -353,8 +374,15 @@ export function SellerDashboardPage() {
           <form onSubmit={saveProfile} className="mt-5 grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-medium">Store name<input name="storeName" defaultValue={seller.storeName} required className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-normal" /></label>
             <label className="text-sm font-medium">Logo URL (optional)<input name="logoUrl" defaultValue={seller.logoUrl || ""} className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-normal" /></label>
-            <label className="text-sm font-medium">Contact email<input name="contactEmail" type="email" defaultValue={seller.contactEmail || ""} className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-normal" /></label>
-            <label className="text-sm font-medium">Contact phone<input name="contactPhone" defaultValue={seller.contactPhone || ""} className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-medium">Contact name<input name="contactName" defaultValue={seller.contactName || user?.name || ""} required className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-medium">Contact email<input name="contactEmail" type="email" required defaultValue={seller.contactEmail || user?.email || ""} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-medium">Contact phone<input name="contactPhone" type="tel" defaultValue={seller.contactPhone || ""} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-medium sm:col-span-2">Address line 1<input name="addressLine1" defaultValue={seller.addressLine1 || ""} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-medium sm:col-span-2">Address line 2<input name="addressLine2" defaultValue={seller.addressLine2 || ""} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-medium">City<input name="city" defaultValue={seller.city || ""} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-medium">State / region<input name="state" defaultValue={seller.state || ""} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-medium">Postal code<input name="postalCode" defaultValue={seller.postalCode || ""} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-medium">Country<input name="country" defaultValue={seller.country || ""} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 font-normal" /></label>
             <label className="text-sm font-medium sm:col-span-2">Store description<textarea name="bio" defaultValue={seller.bio} required rows={4} className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-normal" /></label>
             <div className="sm:col-span-2 flex items-center gap-3"><Button type="submit">Save profile</Button>{profileMessage ? <span className="text-sm text-brand">{profileMessage}</span> : null}</div>
           </form>

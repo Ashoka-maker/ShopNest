@@ -13,6 +13,23 @@
   --shadow-soft: 0 18px 42px rgba(0, 0, 0, 0.3);
   --foreground-on-light: #17231e;
   --muted-on-light: #53635b;
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  --background: #f7f8f5;
+  --foreground: #17231e;
+  --muted: #52635a;
+  --surface: #ffffff;
+  --border: #d7dfd9;
+  --brand: #8a4600;
+  --brand-dark: #713900;
+  --accent: #754100;
+  --ink-soft: #eee9df;
+  --shadow-soft: 0 18px 42px rgba(23, 35, 30, 0.1);
+  --foreground-on-light: #17231e;
+  --muted-on-light: #52635a;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -73,10 +90,13 @@ input,
 select,
 textarea {
   border-radius: 0.8rem;
+  border-color: var(--border);
+  background-color: var(--surface);
+  color: var(--foreground);
 }
 
 ::placeholder {
-  color: color-mix(in srgb, var(--muted) 75%, white);
+  color: var(--muted);
 }
 
 .shopnest-glass {
@@ -93,18 +113,45 @@ textarea {
   outline-offset: 2px;
 }
 
-/* Legacy light surfaces remain intentionally light, so give their inherited
-   text a dedicated dark reading color instead of the dark-theme foreground. */
-[class*="bg-white"] {
+html[data-theme="light"] [class*="bg-white"] {
   color: var(--foreground-on-light);
 }
 
-[class*="bg-white"] .text-muted {
+html[data-theme="light"] [class*="bg-white"] .text-muted {
   color: var(--muted-on-light);
 }
 
-[class*="bg-white"] .text-foreground {
+html[data-theme="light"] [class*="bg-white"] .text-foreground {
   color: var(--foreground-on-light);
+}
+
+html[data-theme="dark"] [class~="bg-white"],
+html[data-theme="dark"] [class~="bg-white/60"],
+html[data-theme="dark"] [class~="bg-white/70"],
+html[data-theme="dark"] [class~="bg-white/75"],
+html[data-theme="dark"] [class~="bg-white/80"],
+html[data-theme="dark"] [class~="bg-white/90"],
+html[data-theme="dark"] [class~="bg-white/95"] {
+  background-color: var(--surface);
+  color: var(--foreground);
+}
+
+html[data-theme="dark"] [class~="bg-white"] .text-muted,
+html[data-theme="dark"] [class~="bg-white/60"] .text-muted,
+html[data-theme="dark"] [class~="bg-white/70"] .text-muted,
+html[data-theme="dark"] [class~="bg-white/75"] .text-muted,
+html[data-theme="dark"] [class~="bg-white/80"] .text-muted,
+html[data-theme="dark"] [class~="bg-white/90"] .text-muted,
+html[data-theme="dark"] [class~="bg-white/95"] .text-muted {
+  color: var(--muted);
+}
+
+html[data-theme="dark"] [class~="bg-brand"][class~="text-white"] {
+  color: #111513;
+}
+
+html[data-theme="light"] [class~="bg-brand"][class~="text-black"] {
+  color: #ffffff;
 }
 
 @keyframes shopnest-rise {

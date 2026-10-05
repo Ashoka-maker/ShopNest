@@ -7,6 +7,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 import type { UserRole } from "@/types/user";
+import type { SellerContactDetails } from "@/types/seller";
 
 function normalizeUserRole(role?: string): UserRole {
   if (role === "seller") return "seller";
@@ -43,11 +44,15 @@ export async function ensureProfile(userId: string, data: {
   if (!updated) throw new Error("Unable to provision the Supabase profile");
 }
 
-export async function provisionSeller(storeName: string, bio: string): Promise<string> {
+export async function provisionSeller(
+  storeName: string,
+  bio: string,
+  contactDetails: SellerContactDetails = {},
+): Promise<string> {
   const response = await fetch("/api/seller/provision", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ storeName, bio }),
+    body: JSON.stringify({ storeName, bio, ...contactDetails }),
   });
   const result = await response.json().catch(() => null) as { sellerId?: string; error?: { message?: string } } | null;
 
@@ -99,7 +104,7 @@ export async function signUpClient(
   password: string,
   name: string,
   role: UserRole = "customer",
-  sellerDetails?: { storeName: string; bio: string },
+  sellerDetails?: { storeName: string; bio: string } & SellerContactDetails,
 ) {
   const safeRole = normalizeUserRole(role);
   const supabase = createClient();
@@ -112,7 +117,19 @@ export async function signUpClient(
         full_name: name,
         role: safeRole,
         ...(safeRole === "seller" && sellerDetails
-          ? { store_name: sellerDetails.storeName.trim(), store_bio: sellerDetails.bio.trim() }
+          ? {
+              store_name: sellerDetails.storeName.trim(),
+              store_bio: sellerDetails.bio.trim(),
+              contact_name: sellerDetails.contactName?.trim() || name.trim(),
+              contact_email: sellerDetails.contactEmail?.trim() || email.trim(),
+              contact_phone: sellerDetails.contactPhone?.trim() || "",
+              address_line1: sellerDetails.addressLine1?.trim() || "",
+              address_line2: sellerDetails.addressLine2?.trim() || "",
+              city: sellerDetails.city?.trim() || "",
+              state: sellerDetails.state?.trim() || "",
+              postal_code: sellerDetails.postalCode?.trim() || "",
+              country: sellerDetails.country?.trim() || "",
+            }
           : {}),
       },
     },

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import type { UserRole } from "@/types/user";
+import type { SellerContactDetails } from "@/types/seller";
 import { getSellerByUserId } from "@/lib/seller-storage";
 import { validateAdminCredentials } from "@/lib/admin-storage";
 import { 
@@ -41,7 +42,7 @@ type AuthContextType = {
     email: string,
     password: string,
     role?: UserRole,
-    sellerDetails?: { storeName: string; bio: string },
+    sellerDetails?: { storeName: string; bio: string } & SellerContactDetails,
   ) => Promise<{ success: boolean; error?: string; userId?: string; role?: UserRole }>;
   signOut: () => void;
   updateProfile: (name: string, email: string) => Promise<{ success: boolean; error?: string }>;
@@ -127,12 +128,22 @@ const saveAdminSession = (user: User | null) => {
 type SupabaseAuthUser = {
   id: string;
   email?: string | null;
+  phone?: string | null;
   email_confirmed_at?: string | null;
   user_metadata?: {
     full_name?: string;
     role?: string;
     store_name?: string;
     store_bio?: string;
+    contact_name?: string;
+    contact_email?: string;
+    contact_phone?: string;
+    address_line1?: string;
+    address_line2?: string;
+    city?: string;
+    state?: string;
+    postal_code?: string;
+    country?: string;
   };
   profile?: {
     role?: string;
@@ -173,9 +184,24 @@ async function ensureAuthenticatedIdentity(supabaseUser: SupabaseAuthUser, user:
 
   if (user.role === "seller" || supabaseUser.user_metadata?.role === "seller") {
     const seller = getSellerByUserId(supabaseUser.id);
+    const metadataText = (key: "contact_name" | "contact_email" | "contact_phone" | "address_line1" | "address_line2" | "city" | "state" | "postal_code" | "country") => {
+      const value = supabaseUser.user_metadata?.[key];
+      return typeof value === "string" ? value : undefined;
+    };
     await provisionSeller(
       seller?.storeName ?? supabaseUser.user_metadata?.store_name ?? "",
       seller?.bio ?? supabaseUser.user_metadata?.store_bio ?? "",
+      {
+        contactName: seller?.contactName ?? metadataText("contact_name"),
+        contactEmail: seller?.contactEmail ?? supabaseUser.email ?? metadataText("contact_email"),
+        contactPhone: seller?.contactPhone ?? metadataText("contact_phone"),
+        addressLine1: seller?.addressLine1 ?? metadataText("address_line1"),
+        addressLine2: seller?.addressLine2 ?? metadataText("address_line2"),
+        city: seller?.city ?? metadataText("city"),
+        state: seller?.state ?? metadataText("state"),
+        postalCode: seller?.postalCode ?? metadataText("postal_code"),
+        country: seller?.country ?? metadataText("country"),
+      },
     );
     const refreshedUser = await getClientUser();
     if (!refreshedUser || refreshedUser.profile?.role !== "seller") {
@@ -343,7 +369,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     role: UserRole = "customer",
-    sellerDetails?: { storeName: string; bio: string },
+    sellerDetails?: { storeName: string; bio: string } & SellerContactDetails,
   ): Promise<{ success: boolean; error?: string; userId?: string; role?: UserRole }> => {
     setIsLoading(true);
     
